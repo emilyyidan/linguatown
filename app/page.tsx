@@ -1,65 +1,192 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import BuildingCard from "@/components/BuildingCard";
+import { 
+  getAllLocationStages, 
+  getGlobalLevel, 
+  setGlobalLevel,
+  getDifficultyDisplayName,
+  getTotalProgressForCurrentLevel,
+  DifficultyLevel,
+  DIFFICULTY_LEVELS,
+  STAGES_PER_LOCATION,
+  ALL_LOCATIONS
+} from "@/lib/progress";
+
+const buildings = [
+  { name: "Restaurant", slug: "restaurant", position: "left" as const },
+  { name: "Bakery", slug: "bakery", position: "right" as const },
+  { name: "School", slug: "school", position: "left" as const },
+  { name: "Bank", slug: "bank", position: "right" as const },
+  { name: "Hotel", slug: "hotel", position: "left" as const },
+  { name: "Grocery Store", slug: "grocery-store", position: "right" as const },
+];
+
+const difficultyColors: Record<DifficultyLevel, string> = {
+  beginner: "bg-green-500",
+  intermediate: "bg-blue-500",
+  advanced: "bg-purple-500",
+};
+
+const difficultyHoverColors: Record<DifficultyLevel, string> = {
+  beginner: "hover:bg-green-600",
+  intermediate: "hover:bg-blue-600",
+  advanced: "hover:bg-purple-600",
+};
 
 export default function Home() {
+  const [stages, setStages] = useState<Record<string, number>>({});
+  const [globalLevel, setGlobalLevelState] = useState<DifficultyLevel>("beginner");
+  const [progress, setProgress] = useState({ completed: 0, total: 18 });
+  const [isClient, setIsClient] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const refreshProgress = () => {
+    setStages(getAllLocationStages());
+    setGlobalLevelState(getGlobalLevel());
+    setProgress(getTotalProgressForCurrentLevel());
+  };
+
+  useEffect(() => {
+    setIsClient(true);
+    refreshProgress();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleLevelChange = (level: DifficultyLevel) => {
+    setGlobalLevel(level);
+    setGlobalLevelState(level);
+    setIsDropdownOpen(false);
+    // Refresh stages for the new level
+    refreshProgress();
+  };
+
+  const totalStages = ALL_LOCATIONS.length * STAGES_PER_LOCATION;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="py-6 sm:py-8 md:py-10">
+      {/* Header with level indicator */}
+      <div className="text-center mb-4 sm:mb-6 md:mb-8">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#2d5a3d] mb-4">
+          Lingua Town
+        </h1>
+        
+        {/* Difficulty badge and progress */}
+        {isClient && (
+          <div className="flex flex-col items-center gap-3">
+            {/* Clickable difficulty selector */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className={`
+                  inline-flex items-center gap-2 px-4 py-2 rounded-full
+                  ${difficultyColors[globalLevel]} text-white font-semibold
+                  shadow-md cursor-pointer
+                  ${difficultyHoverColors[globalLevel]}
+                  transition-colors duration-200
+                `}
+              >
+                <span>{getDifficultyDisplayName(globalLevel)}</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+
+              {/* Dropdown menu */}
+              {isDropdownOpen && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white rounded-xl shadow-lg overflow-hidden z-50 min-w-[160px]">
+                  {DIFFICULTY_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => handleLevelChange(level)}
+                      className={`
+                        w-full px-4 py-3 text-left font-medium
+                        transition-colors duration-150
+                        ${level === globalLevel 
+                          ? `${difficultyColors[level]} text-white` 
+                          : "text-gray-700 hover:bg-gray-100"
+                        }
+                      `}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-3 h-3 rounded-full ${difficultyColors[level]}`} />
+                        {getDifficultyDisplayName(level)}
+                        {level === globalLevel && (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="ml-auto"
+                          >
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Progress bar */}
+            <div className="w-full max-w-xs">
+              <div className="flex justify-between text-sm text-[#4a7c59] mb-1">
+                <span>Progress</span>
+                <span>{progress.completed} / {totalStages}</span>
+              </div>
+              <div className="h-2 bg-white/60 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${difficultyColors[globalLevel]} transition-all duration-500`}
+                  style={{ width: `${(progress.completed / totalStages) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Buildings with tight/overlapping spacing */}
+      <div className="flex flex-col -space-y-16 sm:-space-y-20 md:-space-y-24">
+        {buildings.map((building) => (
+          <BuildingCard
+            key={building.slug}
+            name={building.name}
+            slug={building.slug}
+            position={building.position}
+            stages={isClient ? (stages[building.slug] ?? 0) : 0}
+          />
+        ))}
+      </div>
     </div>
   );
 }
