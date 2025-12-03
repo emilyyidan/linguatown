@@ -280,3 +280,60 @@ Guidelines:
   }
 }
 
+/**
+ * Parameters for building an evaluation prompt
+ */
+export interface BuildEvaluationPromptParams {
+  userMessage: string;
+  learningLanguage: string;
+  nativeLanguage: string;
+  difficulty: DifficultyLevel;
+  conversationContext?: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
+}
+
+/**
+ * Build the evaluation prompt for checking user input errors
+ */
+export function buildEvaluationPrompt(params: BuildEvaluationPromptParams): string {
+  const { userMessage, learningLanguage, nativeLanguage, difficulty, conversationContext = [] } = params;
+  
+  const learningLanguageName = getLanguageName(learningLanguage);
+  const nativeLanguageName = getLanguageName(nativeLanguage);
+  
+  // Build context summary if available
+  let contextSummary = "";
+  if (conversationContext.length > 0) {
+    const recentContext = conversationContext.slice(-3); // Last 3 messages for context
+    contextSummary = `\n\nCONVERSATION CONTEXT:\n${recentContext.map(msg => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`).join("\n")}`;
+  }
+
+  return `You are a language learning assistant evaluating a student's input. The student's native language is ${nativeLanguageName}, and they are learning ${learningLanguageName}.
+
+Your task is to evaluate the user's message for errors. Check for:
+1. Grammar errors in ${learningLanguageName}
+2. Vocabulary errors (wrong word usage, incorrect word choice)
+3. Language mixing (words from ${nativeLanguageName} or other languages when they should be using ${learningLanguageName})
+4. Comprehensibility issues (sentences that don't make sense or are unclear)
+
+DIFFICULTY LEVEL: ${difficulty}
+- For beginner level, be more lenient - only flag major errors
+- For intermediate level, flag moderate to major errors
+- For advanced level, flag even minor errors
+
+${contextSummary}
+
+IMPORTANT INSTRUCTIONS:
+- If the message has NO ERRORS or only very minor issues that don't affect comprehensibility, respond with: OK: The message is correct.
+- If the message has ERRORS, respond with: CORRECTION: [ONLY provide the correction itself in ${nativeLanguageName}. Do NOT include phrases like "there are mistakes here", "keep practicing", or any other accessory messages. Just provide the correction directly.]
+
+Examples:
+- User writes in ${nativeLanguageName} when they should use ${learningLanguageName}: CORRECTION: Try saying this in ${learningLanguageName}: [correction]
+- Grammar error: CORRECTION: Instead of "[wrong]", use "[correct]". The correct form is: [full corrected sentence]
+- Vocabulary error: CORRECTION: Use "[correct word]" instead of "[wrong word]". Try: [full corrected sentence]
+
+Be concise (under 100 characters). Provide ONLY the correction, no extra commentary.`;
+}
+

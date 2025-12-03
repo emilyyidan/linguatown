@@ -7,6 +7,7 @@ interface Message {
   id: string;
   text: string;
   sender: "character" | "user";
+  correction?: string; // Optional correction text for user messages
 }
 
 interface Topic {
@@ -175,29 +176,60 @@ export default function ChatInterface({
         content: msg.text,
       }));
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: apiMessages,
-          characterName,
-          role,
-          location,
-          turnCount: newTurnCount,
-          difficulty,
-          topic: topic
-            ? { id: topic.id, name: topic.name, description: topic.description }
-            : undefined,
-          nativeLanguage,
-          learningLanguage,
-        }),
-      });
+      // Prepare conversation context for evaluation (last few messages)
+      const conversationContext = apiMessages.slice(-5); // Last 5 messages for context
 
-      if (!response.ok) {
+      // Call both APIs in parallel
+      const [chatResponse, evaluationResponse] = await Promise.allSettled([
+        fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: apiMessages,
+            characterName,
+            role,
+            location,
+            turnCount: newTurnCount,
+            difficulty,
+            topic: topic
+              ? {
+                  id: topic.id,
+                  name: topic.name,
+                  description: topic.description,
+                }
+              : undefined,
+            nativeLanguage,
+            learningLanguage,
+          }),
+        }),
+        // Evaluation API call with timeout (3 seconds)
+        Promise.race([
+          fetch("/api/evaluate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userMessage: userMessage.text,
+              learningLanguage,
+              nativeLanguage,
+              difficulty,
+              conversationContext,
+            }),
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Evaluation timeout")), 3000)
+          ),
+        ]).catch(() => {
+          // Return a rejected promise that will be handled by Promise.allSettled
+          throw new Error("Evaluation timeout or error");
+        }),
+      ]);
+
+      // Handle chat response
+      if (chatResponse.status === "rejected" || !chatResponse.value.ok) {
         throw new Error("Failed to get response");
       }
 
-      const data = await response.json();
+      const data = await chatResponse.value.json();
 
       // Store topic guidance if provided (usually on first response)
       if (data.topicGuidance) {
@@ -223,6 +255,35 @@ export default function ChatInterface({
       };
       setMessages((prev) => [...prev, characterResponse]);
       setIsTyping(false);
+
+      // Handle evaluation response (non-blocking)
+      if (
+        evaluationResponse.status === "fulfilled" &&
+        evaluationResponse.value.ok
+      ) {
+        try {
+          const evalData = await evaluationResponse.value.json();
+          if (evalData.needsCorrection && evalData.correction) {
+            // Attach correction to the user message (limit to 100 chars, wrap instead of truncate)
+            const correctionText =
+              evalData.correction.length > 100
+                ? evalData.correction.substring(0, 100)
+                : evalData.correction;
+
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === userMessage.id
+                  ? { ...msg, correction: correctionText }
+                  : msg
+              )
+            );
+          }
+        } catch (error) {
+          // Silently fail - evaluation errors shouldn't block conversation
+          console.error("Failed to parse evaluation response:", error);
+        }
+      }
+      // If evaluation failed or timed out, just continue without correction
 
       // If conversation should end, show the message briefly then transition
       if (data.shouldEnd) {
@@ -292,8 +353,8 @@ export default function ChatInterface({
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${
-              message.sender === "user" ? "justify-end" : "justify-start"
+            className={`flex flex-col ${
+              message.sender === "user" ? "items-end" : "items-start"
             }`}
           >
             <div
@@ -308,6 +369,12 @@ export default function ChatInterface({
             >
               {message.text}
             </div>
+            {/* Show correction directly below user message */}
+            {message.sender === "user" && message.correction && (
+              <div className="mt-1 px-4 text-gray-500 break-words max-w-45%]">
+                {message.correction}
+              </div>
+            )}
           </div>
         ))}
 
