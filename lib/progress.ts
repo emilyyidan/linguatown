@@ -167,25 +167,23 @@ export function getTotalProgressForCurrentLevel(): { completed: number; total: n
 }
 
 // Topic tracking functions
-export function getCompletedTopics(locationSlug: string): string[] {
+export function getCompletedTopics(locationSlug: string, difficulty: DifficultyLevel): string[] {
   const progress = getProgress();
-  const currentLevel = progress.globalLevel;
-  const difficultyProgress = progress.difficulties[currentLevel];
+  const difficultyProgress = progress.difficulties[difficulty];
   return difficultyProgress?.[locationSlug]?.completedTopics ?? [];
 }
 
-export function markTopicComplete(locationSlug: string, topicId: string): void {
+export function markTopicComplete(locationSlug: string, difficulty: DifficultyLevel, topicId: string): void {
   if (typeof window === "undefined") return;
 
   const progress = getProgress();
-  const currentLevel = progress.globalLevel;
 
   // Initialize difficulty progress if needed
-  if (!progress.difficulties[currentLevel]) {
-    progress.difficulties[currentLevel] = {};
+  if (!progress.difficulties[difficulty]) {
+    progress.difficulties[difficulty] = {};
   }
 
-  const difficultyProgress = progress.difficulties[currentLevel]!;
+  const difficultyProgress = progress.difficulties[difficulty]!;
 
   // Initialize location progress if needed
   if (!difficultyProgress[locationSlug]) {

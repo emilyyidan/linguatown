@@ -13,7 +13,7 @@ export function selectNextTopic(
   const allTopicIds = getAllTopicIdsForLocation(locationSlug, difficulty);
   if (allTopicIds.length === 0) return null;
 
-  const completedTopicIds = getCompletedTopics(locationSlug);
+  const completedTopicIds = getCompletedTopics(locationSlug, difficulty);
   const availableTopicIds = allTopicIds.filter(
     (id) => !completedTopicIds.includes(id)
   );
@@ -39,8 +39,9 @@ export function selectNextTopic(
  */
 export function completeTopic(
   locationSlug: string,
+  difficulty: DifficultyLevel,
   topicId: string
 ): void {
-  markTopicComplete(locationSlug, topicId);
+  markTopicComplete(locationSlug, difficulty, topicId);
 }
 

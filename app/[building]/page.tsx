@@ -5,12 +5,16 @@ import Link from "next/link";
 import { use } from "react";
 import ChatInterface from "@/components/ChatInterface";
 import ConversationEnding from "@/components/ConversationEnding";
-import { getCharacterName, getCharacterRole, getOpeningMessage } from "@/lib/characters";
-import { 
-  completeConversation, 
-  getGlobalLevel, 
+import {
+  getCharacterName,
+  getCharacterRole,
+  getOpeningMessage,
+} from "@/lib/characters";
+import {
+  completeConversation,
+  getGlobalLevel,
   getDifficultyDisplayName,
-  DifficultyLevel 
+  DifficultyLevel,
 } from "@/lib/progress";
 import { selectNextTopic, completeTopic } from "@/lib/topicSelection";
 import { Topic } from "@/lib/topics";
@@ -30,7 +34,9 @@ function formatBuildingName(slug: string): string {
 
 export default function BuildingPage({ params }: BuildingPageProps) {
   const { building } = use(params);
-  const [conversationState, setConversationState] = useState<"active" | "ending" | "levelUp">("active");
+  const [conversationState, setConversationState] = useState<
+    "active" | "ending" | "levelUp"
+  >("active");
   const [isClient, setIsClient] = useState(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("beginner");
   const [newLevel, setNewLevel] = useState<DifficultyLevel | null>(null);
@@ -40,7 +46,7 @@ export default function BuildingPage({ params }: BuildingPageProps) {
     setIsClient(true);
     const currentDifficulty = getGlobalLevel();
     setDifficulty(currentDifficulty);
-    
+
     // Select topic for this conversation
     const topic = selectNextTopic(building, currentDifficulty);
     setSelectedTopic(topic);
@@ -56,11 +62,11 @@ export default function BuildingPage({ params }: BuildingPageProps) {
   };
 
   const handleCountdownComplete = () => {
-    // Mark topic as complete
+    // Mark topic as complete (only if topic exists)
     if (selectedTopic) {
-      completeTopic(building, selectedTopic.id);
+      completeTopic(building, difficulty, selectedTopic.id);
     }
-    
+
     const result = completeConversation(building);
     if (result.advanced && result.newLevel) {
       setNewLevel(result.newLevel);
@@ -87,14 +93,17 @@ export default function BuildingPage({ params }: BuildingPageProps) {
       <div className="py-8 sm:py-12 min-h-screen flex items-center justify-center">
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl px-8 py-12 shadow-xl text-center max-w-md">
           <div className="text-6xl mb-6">🎉</div>
-          <h2 className="text-3xl font-bold text-[#2d5a3d] mb-4">
-            Level Up!
-          </h2>
+          <h2 className="text-3xl font-bold text-[#2d5a3d] mb-4">Level Up!</h2>
           <p className="text-[#4a7c59] mb-6">
-            Congratulations! You&apos;ve completed all lessons at the {getDifficultyDisplayName(difficulty)} level!
+            Congratulations! You&apos;ve completed all lessons at the{" "}
+            {getDifficultyDisplayName(difficulty)} level!
           </p>
           <p className="text-xl font-semibold text-[#2d5a3d] mb-8">
-            Welcome to <span className="text-purple-600">{getDifficultyDisplayName(newLevel)}</span>!
+            Welcome to{" "}
+            <span className="text-purple-600">
+              {getDifficultyDisplayName(newLevel)}
+            </span>
+            !
           </p>
           <Link
             href="/"
@@ -142,13 +151,21 @@ export default function BuildingPage({ params }: BuildingPageProps) {
               </svg>
               <span>Back to Town</span>
             </Link>
-            
+
             {/* Difficulty indicator */}
-            <span className={`
+            <span
+              className={`
               px-3 py-1 rounded-full text-sm font-medium
-              ${difficulty === "beginner" ? "bg-green-500" : difficulty === "intermediate" ? "bg-blue-500" : "bg-purple-500"}
+              ${
+                difficulty === "beginner"
+                  ? "bg-green-500"
+                  : difficulty === "intermediate"
+                  ? "bg-blue-500"
+                  : "bg-purple-500"
+              }
               text-white
-            `}>
+            `}
+            >
               {getDifficultyDisplayName(difficulty)}
             </span>
           </div>
@@ -157,17 +174,15 @@ export default function BuildingPage({ params }: BuildingPageProps) {
             {buildingName}
           </h1>
 
-          {selectedTopic && (
-            <ChatInterface
-              characterName={characterName}
-              role={characterRole}
-              location={buildingName}
-              openingMessage={openingMessage}
-              difficulty={difficulty}
-              topic={selectedTopic}
-              onConversationEnd={handleConversationEnd}
-            />
-          )}
+          <ChatInterface
+            characterName={characterName}
+            role={characterRole}
+            location={buildingName}
+            openingMessage={openingMessage}
+            difficulty={difficulty}
+            topic={selectedTopic || undefined}
+            onConversationEnd={handleConversationEnd}
+          />
         </>
       ) : (
         <ConversationEnding onComplete={handleCountdownComplete} />
