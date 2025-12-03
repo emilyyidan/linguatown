@@ -41,6 +41,8 @@ export default function ChatInterface({
   const [isEnding, setIsEnding] = useState(false);
   const [isLoadingOpening, setIsLoadingOpening] = useState(true);
   const [topicGuidance, setTopicGuidance] = useState<string | undefined>(undefined);
+  const [currentHint, setCurrentHint] = useState<string | undefined>();
+  const [showHint, setShowHint] = useState(false); // For intermediate level
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +77,13 @@ export default function ChatInterface({
           const data = await response.json();
           if (data.topicGuidance) {
             setTopicGuidance(data.topicGuidance);
+          }
+          // Store hint from opening message if provided
+          if (data.hint) {
+            setCurrentHint(data.hint);
+            if (difficulty === "intermediate") {
+              setShowHint(false);
+            }
           }
           setMessages([
             {
@@ -137,6 +146,9 @@ export default function ChatInterface({
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInputValue("");
+    // Clear hint when user sends a message
+    setCurrentHint(undefined);
+    setShowHint(false);
     const newTurnCount = turnCount + 1;
     setTurnCount(newTurnCount);
     setIsTyping(true);
@@ -171,6 +183,15 @@ export default function ChatInterface({
       // Store topic guidance if provided (usually on first response)
       if (data.topicGuidance) {
         setTopicGuidance(data.topicGuidance);
+      }
+
+      // Store hint if provided (for beginner and intermediate)
+      if (data.hint) {
+        setCurrentHint(data.hint);
+        // For intermediate, reset showHint so user needs to click to see it
+        if (difficulty === "intermediate") {
+          setShowHint(false);
+        }
       }
 
       // Always add the character's response
@@ -275,6 +296,45 @@ export default function ChatInterface({
 
       {/* Input area */}
       <div className="bg-white/80 backdrop-blur-sm rounded-b-2xl px-4 py-3 border-t border-[#b8d4be]">
+        {/* Hint display inside input area */}
+        {currentHint && !isEnding && (
+          <div className="mb-2">
+            {difficulty === "beginner" && (
+              <p className="text-sm text-gray-600">{currentHint}</p>
+            )}
+            {difficulty === "intermediate" && (
+              <>
+                {!showHint ? (
+                  <button
+                    onClick={() => setShowHint(true)}
+                    className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 21h6" />
+                      <path d="M12 17v-4" />
+                      <path d="M12 3a6 6 0 0 0-6 6c0 2.5 1.5 4.5 3 5.5" />
+                      <path d="M12 3a6 6 0 0 1 6 6c0 2.5-1.5 4.5-3 5.5" />
+                    </svg>
+                    <span>See hint</span>
+                  </button>
+                ) : (
+                  <p className="text-sm text-gray-600">{currentHint}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        
         {isEnding ? (
           <p className="text-center text-[#4a7c59] font-medium py-2">
             Conversation ending...
