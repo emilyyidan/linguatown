@@ -9,12 +9,19 @@ interface Message {
   sender: "character" | "user";
 }
 
+interface Topic {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface ChatInterfaceProps {
   characterName: string;
   role: string;
   location: string;
   openingMessage: string;
   difficulty: DifficultyLevel;
+  topic?: Topic;
   onConversationEnd: () => void;
 }
 
@@ -24,19 +31,16 @@ export default function ChatInterface({
   location,
   openingMessage,
   difficulty,
+  topic,
   onConversationEnd,
 }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "opening",
-      text: openingMessage,
-      sender: "character",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [turnCount, setTurnCount] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [isLoadingOpening, setIsLoadingOpening] = useState(true);
+  const [topicGuidance, setTopicGuidance] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,16 +52,78 @@ export default function ChatInterface({
     scrollToBottom();
   }, [messages]);
 
-  // Auto-focus input on mount and when character stops typing
+  // Generate opening message from API based on topic
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    const generateOpeningMessage = async () => {
+      setIsLoadingOpening(true);
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [],
+            characterName,
+            role,
+            location,
+            turnCount: 0,
+            difficulty,
+            topic: topic ? { id: topic.id, name: topic.name, description: topic.description } : undefined,
+          }),
+        });
 
+        if (response.ok) {
+          const data = await response.json();
+          if (data.topicGuidance) {
+            setTopicGuidance(data.topicGuidance);
+          }
+          setMessages([
+            {
+              id: "opening",
+              text: data.message || openingMessage,
+              sender: "character",
+            },
+          ]);
+        } else {
+          // Fallback to hardcoded opening message
+          setMessages([
+            {
+              id: "opening",
+              text: openingMessage,
+              sender: "character",
+            },
+          ]);
+        }
+      } catch (error) {
+        console.error("Failed to generate opening message:", error);
+        // Fallback to hardcoded opening message
+        setMessages([
+          {
+            id: "opening",
+            text: openingMessage,
+            sender: "character",
+          },
+        ]);
+      } finally {
+        setIsLoadingOpening(false);
+      }
+    };
+
+    generateOpeningMessage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
+
+  // Auto-focus input when opening message is loaded
   useEffect(() => {
-    if (!isTyping && !isEnding) {
+    if (!isLoadingOpening) {
       inputRef.current?.focus();
     }
-  }, [isTyping, isEnding]);
+  }, [isLoadingOpening]);
+
+  useEffect(() => {
+    if (!isTyping && !isEnding && !isLoadingOpening) {
+      inputRef.current?.focus();
+    }
+  }, [isTyping, isEnding, isLoadingOpening]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping || isEnding) return;
@@ -92,6 +158,7 @@ export default function ChatInterface({
           location,
           turnCount: newTurnCount,
           difficulty,
+          topic: topic ? { id: topic.id, name: topic.name, description: topic.description } : undefined,
         }),
       });
 
@@ -100,6 +167,11 @@ export default function ChatInterface({
       }
 
       const data = await response.json();
+
+      // Store topic guidance if provided (usually on first response)
+      if (data.topicGuidance) {
+        setTopicGuidance(data.topicGuidance);
+      }
 
       // Always add the character's response
       const characterResponse: Message = {
@@ -140,6 +212,13 @@ export default function ChatInterface({
 
   return (
     <div className="flex flex-col h-[calc(100vh-200px)] max-h-[600px]">
+      {/* Topic guidance banner */}
+      {topicGuidance && !isLoadingOpening && (
+        <div className="bg-gray-100/90 backdrop-blur-sm border-b border-gray-300 px-4 py-2.5 mb-2 rounded-t-2xl">
+          <p className="text-sm text-gray-700 font-medium">{topicGuidance}</p>
+        </div>
+      )}
+
       {/* Character header */}
       <div className="bg-white/80 backdrop-blur-sm rounded-t-2xl px-4 py-3 border-b border-[#b8d4be]">
         <h2 className="font-bold text-[#2d5a3d] text-lg">{characterName}</h2>
@@ -148,6 +227,17 @@ export default function ChatInterface({
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto bg-white/60 backdrop-blur-sm p-4 space-y-4">
+        {isLoadingOpening && (
+          <div className="flex justify-start">
+            <div className="bg-white text-[#2d5a3d] px-4 py-2 rounded-2xl rounded-bl-md shadow-sm">
+              <span className="inline-flex gap-1">
+                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </span>
+            </div>
+          </div>
+        )}
         {messages.map((message) => (
           <div
             key={message.id}
@@ -198,7 +288,7 @@ export default function ChatInterface({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message..."
-              disabled={isTyping}
+              disabled={isTyping || isLoadingOpening}
               className="
                 flex-1 px-4 py-2 rounded-full
                 bg-[#e8f5e9] border-2 border-transparent
@@ -210,7 +300,7 @@ export default function ChatInterface({
             />
             <button
               onClick={handleSend}
-              disabled={!inputValue.trim() || isTyping}
+              disabled={!inputValue.trim() || isTyping || isLoadingOpening}
               className="
                 px-6 py-2 rounded-full
                 bg-[#4a7c59] text-white font-semibold

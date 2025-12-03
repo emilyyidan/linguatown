@@ -12,6 +12,8 @@ import {
   getDifficultyDisplayName,
   DifficultyLevel 
 } from "@/lib/progress";
+import { selectNextTopic, completeTopic } from "@/lib/topicSelection";
+import { Topic } from "@/lib/topics";
 
 interface BuildingPageProps {
   params: Promise<{
@@ -32,11 +34,17 @@ export default function BuildingPage({ params }: BuildingPageProps) {
   const [isClient, setIsClient] = useState(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("beginner");
   const [newLevel, setNewLevel] = useState<DifficultyLevel | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
 
   useEffect(() => {
     setIsClient(true);
-    setDifficulty(getGlobalLevel());
-  }, []);
+    const currentDifficulty = getGlobalLevel();
+    setDifficulty(currentDifficulty);
+    
+    // Select topic for this conversation
+    const topic = selectNextTopic(building, currentDifficulty);
+    setSelectedTopic(topic);
+  }, [building]);
 
   const buildingName = formatBuildingName(building);
   const characterName = getCharacterName(building, "en");
@@ -48,6 +56,11 @@ export default function BuildingPage({ params }: BuildingPageProps) {
   };
 
   const handleCountdownComplete = () => {
+    // Mark topic as complete
+    if (selectedTopic) {
+      completeTopic(building, selectedTopic.id);
+    }
+    
     const result = completeConversation(building);
     if (result.advanced && result.newLevel) {
       setNewLevel(result.newLevel);
@@ -144,14 +157,17 @@ export default function BuildingPage({ params }: BuildingPageProps) {
             {buildingName}
           </h1>
 
-          <ChatInterface
-            characterName={characterName}
-            role={characterRole}
-            location={buildingName}
-            openingMessage={openingMessage}
-            difficulty={difficulty}
-            onConversationEnd={handleConversationEnd}
-          />
+          {selectedTopic && (
+            <ChatInterface
+              characterName={characterName}
+              role={characterRole}
+              location={buildingName}
+              openingMessage={openingMessage}
+              difficulty={difficulty}
+              topic={selectedTopic}
+              onConversationEnd={handleConversationEnd}
+            />
+          )}
         </>
       ) : (
         <ConversationEnding onComplete={handleCountdownComplete} />

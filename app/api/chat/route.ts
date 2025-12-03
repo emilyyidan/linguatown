@@ -23,10 +23,24 @@ interface ChatRequest {
   location: string;
   turnCount: number;
   difficulty: DifficultyLevel;
+  topic?: {
+    id: string;
+    name: string;
+    description: string;
+  };
 }
 
-const MIN_TURNS = 3;
-const MAX_TURNS = 5;
+// Turn limits vary by difficulty level
+function getTurnLimits(difficulty: DifficultyLevel): { min: number; max: number } {
+  switch (difficulty) {
+    case "beginner":
+      return { min: 2, max: 3 }; // Short, focused conversations
+    case "intermediate":
+      return { min: 3, max: 5 }; // Moderate length
+    case "advanced":
+      return { min: 4, max: 7 }; // Longer, more in-depth discussions
+  }
+}
 
 // Location-specific scenarios for each difficulty level
 const locationScenarios: Record<string, Record<DifficultyLevel, string>> = {
@@ -34,21 +48,22 @@ const locationScenarios: Record<string, Record<DifficultyLevel, string>> = {
     beginner: `SCENARIO: Simple ordering
 - Help them order a meal (drink, main course, maybe dessert)
 - Ask simple questions: "What would you like?" "Anything to drink?"
-- Keep it to basic menu items and yes/no or simple choice questions`,
+- Keep it to basic menu items or simple choice questions`,
     intermediate: `SCENARIO: Special occasion dinner
 - They're planning a birthday dinner or anniversary meal
 - Ask about the occasion, dietary restrictions, preferences
 - Discuss recommendations, specials, wine pairings
 - Encourage them to describe what they're celebrating and who's coming`,
     advanced: `SCENARIO: Food critic or culinary discussion
-- Treat them as a food enthusiast or critic
-- Discuss cooking techniques, ingredient sourcing, chef's inspiration
+- Treat them as a food enthusiast 
+- Discuss ingredient sourcing, chef's inspiration
 - Ask about their own cooking experiences and favorite cuisines
 - Encourage them to share opinions and detailed preferences`,
   },
   "Bakery": {
     beginner: `SCENARIO: Simple purchase
-- Help them buy bread, pastries, or a simple cake
+- Help them choose what to buy including how many of various items.
+- Create realistic scenarios such as an item being out of stock or needing to wait for it to be done baking
 - Ask basic questions: "What can I get you?" "For here or to go?"
 - Suggest popular items, handle straightforward transactions`,
     intermediate: `SCENARIO: Party catering order
@@ -71,7 +86,7 @@ const locationScenarios: Record<string, Record<DifficultyLevel, string>> = {
 - Discuss academic progress, extracurriculars, or choosing classes
 - Ask about interests, goals, concerns
 - Encourage them to describe their child's interests or their own academic goals`,
-    advanced: `SCENARIO: Educational philosophy discussion
+    advanced: `SCENARIO: Discuss how much technology should be used in the classroom
 - Discuss teaching methods, learning styles, educational trends
 - Ask about their experiences with different approaches to learning
 - Encourage them to share their views on education and what works for them`,
@@ -100,7 +115,7 @@ const locationScenarios: Record<string, Record<DifficultyLevel, string>> = {
 - Ask about the occasion, preferences, special requests
 - Discuss amenities, local attractions, dining options
 - Encourage them to describe their ideal trip and what they want to experience`,
-    advanced: `SCENARIO: Travel expert or frequent guest discussion
+    advanced: `SCENARIO: Travel expert
 - Treat them as an experienced traveler
 - Discuss travel tips, hidden gems, cultural experiences
 - Ask about their most memorable trips and travel philosophy
@@ -141,8 +156,9 @@ function getDifficultyGuidelines(difficulty: DifficultyLevel): string {
     case "beginner":
       return `CONVERSATION STYLE:
 - Use simple, clear language
-- Ask yes/no questions or offer 2-3 choices
-- Keep your responses short (1-2 sentences)
+- Offer variety between direct questions, and offering information and letting the user direct the conversation.
+- If asking a question, only ask one. Do not include multiple questions in one turn.
+- Keep your responses short (1 sentence)
 - Focus on the immediate task
 - Be patient and encouraging`;
     
@@ -167,41 +183,57 @@ function getDifficultyGuidelines(difficulty: DifficultyLevel): string {
 export async function POST(request: NextRequest) {
   try {
     const body: ChatRequest = await request.json();
-    const { messages, characterName, role, location, turnCount, difficulty } = body;
+    const { messages, characterName, role, location, turnCount, difficulty, topic } = body;
 
+    const { min: MIN_TURNS, max: MAX_TURNS } = getTurnLimits(difficulty);
     const canEnd = turnCount >= MIN_TURNS;
     const mustEnd = turnCount >= MAX_TURNS;
-    const scenarioPrompt = getScenarioPrompt(location, difficulty);
     const styleGuidelines = getDifficultyGuidelines(difficulty);
+    
+    // Use specific topic if provided, otherwise fall back to generic scenario
+    const topicPrompt = topic 
+      ? `CONVERSATION TOPIC: ${topic.name}
+${topic.description}
+
+You should initiate this conversation naturally. Start by greeting the customer and then guide the conversation toward this topic. Make it feel natural and contextual to your role as a ${role} at the ${location}.`
+      : getScenarioPrompt(location, difficulty);
 
     let systemPrompt: string;
 
     if (mustEnd) {
+      const closingGuidance = difficulty === "beginner"
+        ? "Keep it very brief and simple (1 sentence). Thank them warmly."
+        : difficulty === "intermediate"
+        ? "Thank them warmly and reference something specific from the conversation. Keep it brief (1-2 sentences)."
+        : "Thank them warmly and reference something meaningful from your discussion. You can be slightly more elaborate (2-3 sentences) given the depth of conversation.";
+
       systemPrompt = `You are ${characterName}, a friendly ${role} at the ${location}.
 
 This is the END of the conversation. Wrap up naturally based on what was discussed.
-- Thank them warmly
-- Reference something specific from the conversation
-- Keep it brief and genuine (1-2 sentences)
+${closingGuidance}
 
 Respond with ONLY your closing message.`;
     } else if (canEnd) {
+      const endGuidance = difficulty === "beginner" 
+        ? "Since this is a beginner conversation, wrap up soon unless there's a critical detail to cover. Keep it brief and friendly."
+        : difficulty === "intermediate"
+        ? "Based on how the conversation has flowed, decide whether to continue or wrap up naturally."
+        : "You can continue exploring this topic in depth. Only wrap up when the conversation has reached a natural, satisfying conclusion.";
+
       systemPrompt = `You are ${characterName}, a friendly ${role} at the ${location}.
 
-${scenarioPrompt}
+${topicPrompt}
 
 ${styleGuidelines}
 
-Based on how the conversation has flowed, decide whether to:
-- Continue if there's more natural ground to cover
-- Wrap up if the interaction has reached a satisfying conclusion
+${endGuidance}
 
 IMPORTANT: Start your response with [CONTINUE] or [END], then your message.
 If ending, give a warm, natural goodbye that references the conversation.`;
     } else {
       systemPrompt = `You are ${characterName}, a friendly ${role} at the ${location}.
 
-${scenarioPrompt}
+${topicPrompt}
 
 ${styleGuidelines}
 
@@ -240,9 +272,17 @@ Guidelines:
       }
     }
 
+    // Generate topic guidance for first message only
+    let topicGuidance: string | undefined;
+    if (turnCount === 0 && topic) {
+      // Generate a natural description of what the user will practice
+      topicGuidance = `Practice: ${topic.description}`;
+    }
+
     return NextResponse.json({ 
       message: responseText,
       shouldEnd,
+      topicGuidance,
     });
   } catch (error) {
     console.error("Chat API error:", error);

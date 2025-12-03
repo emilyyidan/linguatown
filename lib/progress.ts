@@ -9,6 +9,7 @@ export const ALL_LOCATIONS = ["restaurant", "bakery", "school", "bank", "hotel",
 export interface LocationDifficultyProgress {
   completedStages: number; // 0-3 stages completed at this difficulty
   completedAt: string[];
+  completedTopics: string[]; // Array of topic IDs that have been completed
 }
 
 export interface DifficultyProgress {
@@ -117,7 +118,7 @@ export function completeConversation(locationSlug: string): { advanced: boolean;
   
   // Initialize location progress if needed
   if (!difficultyProgress[locationSlug]) {
-    difficultyProgress[locationSlug] = { completedStages: 0, completedAt: [] };
+    difficultyProgress[locationSlug] = { completedStages: 0, completedAt: [], completedTopics: [] };
   }
   
   const locationProgress = difficultyProgress[locationSlug];
@@ -163,4 +164,39 @@ export function getTotalProgressForCurrentLevel(): { completed: number; total: n
   const completed = Object.values(stages).reduce((sum, s) => sum + s, 0);
   const total = ALL_LOCATIONS.length * STAGES_PER_LOCATION;
   return { completed, total };
+}
+
+// Topic tracking functions
+export function getCompletedTopics(locationSlug: string): string[] {
+  const progress = getProgress();
+  const currentLevel = progress.globalLevel;
+  const difficultyProgress = progress.difficulties[currentLevel];
+  return difficultyProgress?.[locationSlug]?.completedTopics ?? [];
+}
+
+export function markTopicComplete(locationSlug: string, topicId: string): void {
+  if (typeof window === "undefined") return;
+
+  const progress = getProgress();
+  const currentLevel = progress.globalLevel;
+
+  // Initialize difficulty progress if needed
+  if (!progress.difficulties[currentLevel]) {
+    progress.difficulties[currentLevel] = {};
+  }
+
+  const difficultyProgress = progress.difficulties[currentLevel]!;
+
+  // Initialize location progress if needed
+  if (!difficultyProgress[locationSlug]) {
+    difficultyProgress[locationSlug] = { completedStages: 0, completedAt: [], completedTopics: [] };
+  }
+
+  const locationProgress = difficultyProgress[locationSlug];
+
+  // Add topic if not already completed
+  if (!locationProgress.completedTopics.includes(topicId)) {
+    locationProgress.completedTopics.push(topicId);
+    saveProgress(progress);
+  }
 }
