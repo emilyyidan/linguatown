@@ -28,12 +28,14 @@ interface ChatRequest {
     name: string;
     description: string;
   };
+  nativeLanguage?: string;
+  learningLanguage?: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: ChatRequest = await request.json();
-    const { messages, characterName, role, location, turnCount, difficulty, topic } = body;
+    const { messages, characterName, role, location, turnCount, difficulty, topic, nativeLanguage = "en", learningLanguage = "en" } = body;
 
     const { min: MIN_TURNS, max: MAX_TURNS } = getTurnLimits(difficulty);
     const canEnd = turnCount >= MIN_TURNS;
@@ -49,6 +51,8 @@ export async function POST(request: NextRequest) {
       turnCount,
       canEnd,
       mustEnd,
+      nativeLanguage,
+      learningLanguage,
     });
 
     const openai = getOpenAIClient();
@@ -82,11 +86,14 @@ export async function POST(request: NextRequest) {
     // Parse hint from response (for beginner and intermediate only)
     let hint: string | undefined;
     if (difficulty !== "advanced") {
-      const hintMatch = responseText.match(/HINT:\s*(.+?)(?:\n|$)/i);
+      // Improved regex: match HINT: (case-insensitive) followed by whitespace, then capture everything
+      // Use [\s\S] instead of . with 's' flag for better compatibility
+      // This handles multi-line hints and ensures we capture the complete hint text
+      const hintMatch = responseText.match(/HINT:\s*([\s\S]+?)(?:\n\n|\n*$)/i);
       if (hintMatch) {
         hint = hintMatch[1].trim();
-        // Remove hint from response text
-        responseText = responseText.replace(/HINT:\s*.+?(?:\n|$)/i, "").trim();
+        // Remove hint from response text - match the entire hint including the HINT: prefix
+        responseText = responseText.replace(/HINT:\s*[\s\S]+?(?:\n\n|\n*$)/i, "").trim();
       }
     }
 

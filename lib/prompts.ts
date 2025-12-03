@@ -163,6 +163,20 @@ export function getDifficultyGuidelines(difficulty: DifficultyLevel): string {
 }
 
 /**
+ * Map language codes to full names
+ */
+function getLanguageName(languageCode: string): string {
+  const languageNames: Record<string, string> = {
+    en: "English",
+    it: "Italian",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+  };
+  return languageNames[languageCode] || languageCode;
+}
+
+/**
  * Parameters for building a system prompt
  */
 export interface BuildPromptParams {
@@ -178,15 +192,25 @@ export interface BuildPromptParams {
   turnCount: number;
   canEnd: boolean;
   mustEnd: boolean;
+  nativeLanguage?: string;
+  learningLanguage?: string;
 }
 
 /**
  * Build the complete system prompt for the LLM based on conversation state
  */
 export function buildSystemPrompt(params: BuildPromptParams): string {
-  const { characterName, role, location, difficulty, topic, canEnd, mustEnd } = params;
+  const { characterName, role, location, difficulty, topic, canEnd, mustEnd, nativeLanguage = "en", learningLanguage = "en" } = params;
   
   const styleGuidelines = getDifficultyGuidelines(difficulty);
+  const learningLanguageName = getLanguageName(learningLanguage);
+  const nativeLanguageName = getLanguageName(nativeLanguage);
+  
+  // Language instruction for conversation
+  const languageInstruction = learningLanguage !== "en"
+    ? `\nLANGUAGE REQUIREMENT:
+You must respond ONLY in ${learningLanguageName}. The user's native language is ${nativeLanguageName}, but you should conduct this entire conversation in ${learningLanguageName}. Do not switch to ${nativeLanguageName} or any other language.`
+    : "";
   
   // Use specific topic if provided, otherwise fall back to generic scenario
   const topicPrompt = topic 
@@ -204,6 +228,7 @@ You should initiate this conversation naturally. Start by greeting the customer 
       : "Thank them warmly and reference something meaningful from your discussion. You can be slightly more elaborate (2-3 sentences) given the depth of conversation.";
 
     return `You are ${characterName}, a friendly ${role} at the ${location}.
+${languageInstruction}
 
 This is the END of the conversation. Wrap up naturally based on what was discussed.
 ${closingGuidance}
@@ -217,12 +242,13 @@ Respond with ONLY your closing message.`;
       : "You can continue exploring this topic in depth. Only wrap up when the conversation has reached a natural, satisfying conclusion.";
 
     const hintInstruction = difficulty === "beginner"
-      ? `\nIMPORTANT: After your response, generate a helpful hint. Format it as: HINT: [a specific example of what the user could say in response].`
+      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}. For example: HINT: Tell them you couldn't find the item you were looking for.`
       : difficulty === "intermediate"
-      ? `\nIMPORTANT: After your response, generate a helpful hint. Format it as: HINT: [a specific example of what the user could say in response].`
+      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}.`
       : "";
 
     return `You are ${characterName}, a friendly ${role} at the ${location}.
+${languageInstruction}
 
 ${topicPrompt}
 
@@ -234,12 +260,13 @@ IMPORTANT: Start your response with [CONTINUE] or [END], then your message.
 If ending, give a warm, natural goodbye that references the conversation.${hintInstruction}`;
   } else {
     const hintInstruction = difficulty === "beginner"
-      ? `\nIMPORTANT: After your response, generate a helpful hint for the user. Format it as: HINT: [a specific example of what the user could say in response to your message]. For example, if you ask "Did you find everything you were looking for?", your hint might be: HINT: Let the clerk know that you could not find sourdough bread.`
+      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response to your message, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}. For example, if you ask "Did you find everything you were looking for?" in ${learningLanguageName}, your hint might be: HINT: Let the clerk know that you could not find the item you were looking for.`
       : difficulty === "intermediate"
-      ? `\nIMPORTANT: After your response, generate a helpful hint for the user. Format it as: HINT: [a specific example of what the user could say in response to your message].`
+      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response to your message, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}.`
       : "";
 
     return `You are ${characterName}, a friendly ${role} at the ${location}.
+${languageInstruction}
 
 ${topicPrompt}
 

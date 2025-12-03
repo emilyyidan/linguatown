@@ -1,4 +1,11 @@
-const STORAGE_KEY = "lingua-town-progress";
+import { getLearningLanguage } from "./language";
+
+const STORAGE_KEY_PREFIX = "lingua-town-progress";
+
+function getStorageKey(): string {
+  const learningLanguage = getLearningLanguage();
+  return `${STORAGE_KEY_PREFIX}-${learningLanguage}`;
+}
 
 export type DifficultyLevel = "beginner" | "intermediate" | "advanced";
 
@@ -34,8 +41,25 @@ export function getProgress(): UserProgress {
   if (typeof window === "undefined") return getDefaultProgress();
   
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return getDefaultProgress();
+    const storageKey = getStorageKey();
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) {
+      // Migration: try old format for backward compatibility
+      const oldStored = localStorage.getItem("lingua-town-progress");
+      if (oldStored) {
+        try {
+          const parsed = JSON.parse(oldStored);
+          if (parsed.globalLevel) {
+            // Migrate old progress to new language-scoped key
+            saveProgress(parsed as UserProgress);
+            return parsed as UserProgress;
+          }
+        } catch {
+          // Ignore migration errors
+        }
+      }
+      return getDefaultProgress();
+    }
     const parsed = JSON.parse(stored);
     // Migration: handle old format
     if (!parsed.globalLevel) {
@@ -50,7 +74,8 @@ export function getProgress(): UserProgress {
 export function saveProgress(progress: UserProgress): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    const storageKey = getStorageKey();
+    localStorage.setItem(storageKey, JSON.stringify(progress));
   } catch (error) {
     console.error("Failed to save progress:", error);
   }
@@ -151,7 +176,8 @@ export function completeConversation(locationSlug: string): { advanced: boolean;
 
 export function resetProgress(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEY);
+  const storageKey = getStorageKey();
+  localStorage.removeItem(storageKey);
 }
 
 // For display purposes

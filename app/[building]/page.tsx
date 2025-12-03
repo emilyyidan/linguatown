@@ -16,6 +16,7 @@ import {
   getDifficultyDisplayName,
   DifficultyLevel,
 } from "@/lib/progress";
+import { getLearningLanguage, getNativeLanguage } from "@/lib/language";
 import { selectNextTopic, completeTopic } from "@/lib/topicSelection";
 import { Topic } from "@/lib/topics";
 
@@ -41,11 +42,15 @@ export default function BuildingPage({ params }: BuildingPageProps) {
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("beginner");
   const [newLevel, setNewLevel] = useState<DifficultyLevel | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [learningLanguage, setLearningLanguage] = useState<string>("en");
+  const [nativeLanguage, setNativeLanguage] = useState<string>("en");
 
   useEffect(() => {
     setIsClient(true);
     const currentDifficulty = getGlobalLevel();
     setDifficulty(currentDifficulty);
+    setLearningLanguage(getLearningLanguage());
+    setNativeLanguage(getNativeLanguage());
 
     // Select topic for this conversation
     const topic = selectNextTopic(building, currentDifficulty);
@@ -53,9 +58,24 @@ export default function BuildingPage({ params }: BuildingPageProps) {
   }, [building]);
 
   const buildingName = formatBuildingName(building);
-  const characterName = getCharacterName(building, "en");
-  const characterRole = getCharacterRole(building, "en");
-  const openingMessage = getOpeningMessage(building, "en");
+  const characterName = isClient
+    ? getCharacterName(
+        building,
+        learningLanguage as "en" | "it" | "es" | "fr" | "de"
+      )
+    : "";
+  const characterRole = isClient
+    ? getCharacterRole(
+        building,
+        learningLanguage as "en" | "it" | "es" | "fr" | "de"
+      )
+    : "";
+  const openingMessage = isClient
+    ? getOpeningMessage(
+        building,
+        learningLanguage as "en" | "it" | "es" | "fr" | "de"
+      )
+    : "";
 
   const handleConversationEnd = () => {
     setConversationState("ending");
@@ -181,6 +201,8 @@ export default function BuildingPage({ params }: BuildingPageProps) {
             openingMessage={openingMessage}
             difficulty={difficulty}
             topic={selectedTopic || undefined}
+            nativeLanguage={nativeLanguage}
+            learningLanguage={learningLanguage}
             onConversationEnd={handleConversationEnd}
           />
         </>

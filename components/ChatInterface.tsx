@@ -22,6 +22,8 @@ interface ChatInterfaceProps {
   openingMessage: string;
   difficulty: DifficultyLevel;
   topic?: Topic;
+  nativeLanguage: string;
+  learningLanguage: string;
   onConversationEnd: () => void;
 }
 
@@ -32,6 +34,8 @@ export default function ChatInterface({
   openingMessage,
   difficulty,
   topic,
+  nativeLanguage,
+  learningLanguage,
   onConversationEnd,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,7 +44,9 @@ export default function ChatInterface({
   const [isTyping, setIsTyping] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [isLoadingOpening, setIsLoadingOpening] = useState(true);
-  const [topicGuidance, setTopicGuidance] = useState<string | undefined>(undefined);
+  const [topicGuidance, setTopicGuidance] = useState<string | undefined>(
+    undefined
+  );
   const [currentHint, setCurrentHint] = useState<string | undefined>();
   const [showHint, setShowHint] = useState(false); // For intermediate level
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -69,7 +75,15 @@ export default function ChatInterface({
             location,
             turnCount: 0,
             difficulty,
-            topic: topic ? { id: topic.id, name: topic.name, description: topic.description } : undefined,
+            topic: topic
+              ? {
+                  id: topic.id,
+                  name: topic.name,
+                  description: topic.description,
+                }
+              : undefined,
+            nativeLanguage,
+            learningLanguage,
           }),
         });
 
@@ -79,8 +93,8 @@ export default function ChatInterface({
             setTopicGuidance(data.topicGuidance);
           }
           // Store hint from opening message if provided
-          if (data.hint) {
-            setCurrentHint(data.hint);
+          if (data.hint && data.hint.trim()) {
+            setCurrentHint(data.hint.trim());
             if (difficulty === "intermediate") {
               setShowHint(false);
             }
@@ -156,7 +170,8 @@ export default function ChatInterface({
     try {
       // Convert messages to API format
       const apiMessages = newMessages.map((msg) => ({
-        role: msg.sender === "user" ? "user" as const : "assistant" as const,
+        role:
+          msg.sender === "user" ? ("user" as const) : ("assistant" as const),
         content: msg.text,
       }));
 
@@ -170,7 +185,11 @@ export default function ChatInterface({
           location,
           turnCount: newTurnCount,
           difficulty,
-          topic: topic ? { id: topic.id, name: topic.name, description: topic.description } : undefined,
+          topic: topic
+            ? { id: topic.id, name: topic.name, description: topic.description }
+            : undefined,
+          nativeLanguage,
+          learningLanguage,
         }),
       });
 
@@ -186,13 +205,15 @@ export default function ChatInterface({
       }
 
       // Store hint if provided (for beginner and intermediate)
-      if (data.hint) {
-        setCurrentHint(data.hint);
+      // Only update hint if a new non-empty one is provided - preserve existing hint if not
+      if (data.hint && data.hint.trim()) {
+        setCurrentHint(data.hint.trim());
         // For intermediate, reset showHint so user needs to click to see it
         if (difficulty === "intermediate") {
           setShowHint(false);
         }
       }
+      // If data.hint is undefined, null, or empty, preserve the current hint (don't clear it)
 
       // Always add the character's response
       const characterResponse: Message = {
@@ -252,9 +273,18 @@ export default function ChatInterface({
           <div className="flex justify-start">
             <div className="bg-white text-[#2d5a3d] px-4 py-2 rounded-2xl rounded-bl-md shadow-sm">
               <span className="inline-flex gap-1">
-                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                <span
+                  className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <span
+                  className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <span
+                  className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
               </span>
             </div>
           </div>
@@ -262,7 +292,9 @@ export default function ChatInterface({
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex ${
+              message.sender === "user" ? "justify-end" : "justify-start"
+            }`}
           >
             <div
               className={`
@@ -278,19 +310,28 @@ export default function ChatInterface({
             </div>
           </div>
         ))}
-        
+
         {isTyping && (
           <div className="flex justify-start">
             <div className="bg-white text-[#2d5a3d] px-4 py-2 rounded-2xl rounded-bl-md shadow-sm">
               <span className="inline-flex gap-1">
-                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                <span
+                  className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <span
+                  className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <span
+                  className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
               </span>
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -334,7 +375,7 @@ export default function ChatInterface({
             )}
           </div>
         )}
-        
+
         {isEnding ? (
           <p className="text-center text-[#4a7c59] font-medium py-2">
             Conversation ending...
