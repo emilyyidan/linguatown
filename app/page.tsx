@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import BuildingCard from "@/components/BuildingCard";
 import {
   getAllLocationStages,
@@ -54,6 +55,11 @@ export default function Home() {
   const [learningLanguage, setLearningLanguageState] = useState<Language>("en");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
+  const buildingRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const searchParams = useSearchParams();
+  const [buildingToAnimate, setBuildingToAnimate] = useState<string | null>(
+    null
+  );
 
   const refreshProgress = () => {
     setStages(getAllLocationStages());
@@ -66,6 +72,33 @@ export default function Home() {
     setLearningLanguageState(getLearningLanguage());
     refreshProgress();
   }, []);
+
+  // Scroll to building and trigger animation when returning from a conversation
+  useEffect(() => {
+    const buildingSlug = searchParams.get("building");
+    if (buildingSlug && isClient) {
+      // Set flag to trigger animation for this building
+      setBuildingToAnimate(buildingSlug);
+
+      // Wait for DOM to update with new progress, then scroll
+      setTimeout(() => {
+        const buildingElement = buildingRefs.current[buildingSlug];
+        if (buildingElement) {
+          buildingElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+        // Clean up URL parameter
+        window.history.replaceState({}, "", "/");
+
+        // Clear animation flag after animation completes
+        setTimeout(() => {
+          setBuildingToAnimate(null);
+        }, 600);
+      }, 100);
+    }
+  }, [searchParams, isClient]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -304,16 +337,25 @@ export default function Home() {
       </div>
 
       {/* Buildings with tight/overlapping spacing */}
-      <div className="flex flex-col -space-y-16 sm:-space-y-20 md:-space-y-24">
-        {buildings.map((building) => (
-          <BuildingCard
-            key={building.slug}
-            name={building.name}
-            slug={building.slug}
-            position={building.position}
-            stages={isClient ? stages[building.slug] ?? 0 : 0}
-          />
-        ))}
+      <div className="flex justify-center">
+        <div className="flex flex-col -space-y-16 sm:-space-y-20 md:-space-y-24 w-full max-w-7xl">
+          {buildings.map((building) => (
+            <div
+              key={building.slug}
+              ref={(el) => {
+                buildingRefs.current[building.slug] = el;
+              }}
+            >
+              <BuildingCard
+                name={building.name}
+                slug={building.slug}
+                position={building.position}
+                stages={isClient ? stages[building.slug] ?? 0 : 0}
+                shouldAnimate={buildingToAnimate === building.slug}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

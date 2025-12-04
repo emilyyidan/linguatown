@@ -207,7 +207,10 @@ export default function BuildingPage({ params }: BuildingPageProps) {
           />
         </>
       ) : (
-        <ConversationEnding onComplete={handleCountdownComplete} />
+        <ConversationEnding
+          onComplete={handleCountdownComplete}
+          buildingSlug={building}
+        />
       )}
     </div>
   );

@@ -7,7 +7,10 @@ interface ConversationEndingProps {
   onComplete?: () => void;
 }
 
-export default function ConversationEnding({ onComplete }: ConversationEndingProps) {
+export default function ConversationEnding({
+  onComplete,
+  buildingSlug,
+}: ConversationEndingProps) {
   const [countdown, setCountdown] = useState(3);
   const router = useRouter();
 
@@ -20,9 +23,11 @@ export default function ConversationEnding({ onComplete }: ConversationEndingPro
     } else {
       // Countdown finished
       onComplete?.();
-      router.push("/");
+      // Navigate to home with building slug as query parameter
+      const url = buildingSlug ? `/?building=${buildingSlug}` : "/";
+      router.push(url);
     }
-  }, [countdown, router, onComplete]);
+  }, [countdown, router, onComplete, buildingSlug]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
@@ -30,10 +35,8 @@ export default function ConversationEnding({ onComplete }: ConversationEndingPro
         <h2 className="text-2xl sm:text-3xl font-bold text-[#2d5a3d] mb-6">
           Conversation Complete!
         </h2>
-        
-        <p className="text-[#4a7c59] mb-8">
-          Great job! Returning to town...
-        </p>
+
+        <p className="text-[#4a7c59] mb-8">Great job! Returning to town...</p>
 
         <div className="relative w-24 h-24 mx-auto">
           {/* Circular progress indicator */}
@@ -58,7 +61,7 @@ export default function ConversationEnding({ onComplete }: ConversationEndingPro
               className="transition-all duration-1000 ease-linear"
             />
           </svg>
-          
+
           {/* Countdown number */}
           <span className="absolute inset-0 flex items-center justify-center text-4xl font-bold text-[#2d5a3d]">
             {countdown}
@@ -68,4 +71,3 @@ export default function ConversationEnding({ onComplete }: ConversationEndingPro
     </div>
   );
 }
-

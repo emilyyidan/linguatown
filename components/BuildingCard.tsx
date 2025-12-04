@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -6,6 +9,7 @@ interface BuildingCardProps {
   slug: string;
   position: "left" | "right";
   stages?: number; // 0-3 completed stages at current difficulty
+  shouldAnimate?: boolean; // Whether to trigger animation (e.g., when returning from conversation)
 }
 
 // Map stages to image level (1-3)
@@ -19,20 +23,47 @@ export default function BuildingCard({
   slug,
   position,
   stages = 0,
+  shouldAnimate = false,
 }: BuildingCardProps) {
   const imageLevel = getImageLevel(stages);
   const imageSrc = `/buildings/${slug}-level-${imageLevel}.png`;
   const isComplete = stages >= 3;
+  const [isAnimating, setIsAnimating] = useState(false);
+  const prevImageLevelRef = useRef<number>(imageLevel);
+  const prevShouldAnimateRef = useRef<boolean>(false);
 
-  const positionClasses = position === "left" 
-    ? "self-start ml-[8%] sm:ml-[15%] md:ml-[20%]" 
-    : "self-end mr-[8%] sm:mr-[15%] md:mr-[20%]";
+  // Trigger squash/stretch animation only when shouldAnimate is true and level increased
+  useEffect(() => {
+    // Only animate if:
+    // 1. shouldAnimate flag transitions from false to true
+    // 2. The image level actually increased (not just changed)
+    // 3. We had a previous level (not initial mount)
+    if (
+      shouldAnimate &&
+      !prevShouldAnimateRef.current &&
+      imageLevel > prevImageLevelRef.current &&
+      prevImageLevelRef.current > 0
+    ) {
+      setIsAnimating(true);
+      const timer = setTimeout(() => {
+        setIsAnimating(false);
+      }, 600); // Animation duration
+      return () => clearTimeout(timer);
+    }
+    prevImageLevelRef.current = imageLevel;
+    prevShouldAnimateRef.current = shouldAnimate;
+  }, [imageLevel, shouldAnimate]);
+
+  const positionClasses =
+    position === "left"
+      ? "self-start ml-[8%] sm:ml-[15%] md:ml-[20%]"
+      : "self-end mr-[8%] sm:mr-[15%] md:mr-[20%]";
 
   const content = (
     <div className="relative group">
       {/* Glow effect for completed buildings */}
       {isComplete && (
-        <div 
+        <div
           className="
             absolute inset-0 
             bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-400
@@ -56,9 +87,11 @@ export default function BuildingCard({
           lg:w-[320px] lg:h-[320px]
           object-contain
           transition-all duration-300
-          ${isComplete 
-            ? "drop-shadow-[0_0_20px_rgba(251,191,36,0.5)]" 
-            : "drop-shadow-lg group-hover:drop-shadow-2xl"
+          ${isAnimating ? "animate-[squashStretch_0.6s_ease-in-out]" : ""}
+          ${
+            isComplete
+              ? "drop-shadow-[0_0_20px_rgba(251,191,36,0.5)]"
+              : "drop-shadow-lg group-hover:drop-shadow-2xl"
           }
         `}
         priority
@@ -72,9 +105,10 @@ export default function BuildingCard({
           whitespace-nowrap
           shadow-md
           transition-opacity duration-300
-          ${isComplete 
-            ? "opacity-100 text-amber-600 bg-amber-50/90" 
-            : "opacity-0 group-hover:opacity-100 text-[#2d5a3d]"
+          ${
+            isComplete
+              ? "opacity-100 text-amber-600 bg-amber-50/90"
+              : "opacity-0 group-hover:opacity-100 text-[#2d5a3d]"
           }
         `}
       >
