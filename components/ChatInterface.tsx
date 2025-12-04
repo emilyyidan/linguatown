@@ -161,8 +161,7 @@ export default function ChatInterface({
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInputValue("");
-    // Clear hint when user sends a message
-    setCurrentHint(undefined);
+    // Don't clear hint here - let it persist until a new one is provided
     setShowHint(false);
     const newTurnCount = turnCount + 1;
     setTurnCount(newTurnCount);
@@ -371,7 +370,7 @@ export default function ChatInterface({
             </div>
             {/* Show correction directly below user message */}
             {message.sender === "user" && message.correction && (
-              <div className="mt-1 px-4 text-gray-500 break-words max-w-45%]">
+              <div className="mt-1 px-4 text-gray-500 break-words max-w-[56%]">
                 {message.correction}
               </div>
             )}
