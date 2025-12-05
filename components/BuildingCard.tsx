@@ -7,7 +7,6 @@ import Link from "next/link";
 interface BuildingCardProps {
   name: string;
   slug: string;
-  position: "left" | "right";
   stages?: number; // 0-3 completed stages at current difficulty
   shouldAnimate?: boolean; // Whether to trigger animation (e.g., when returning from conversation)
 }
@@ -21,7 +20,6 @@ function getImageLevel(stages: number): number {
 export default function BuildingCard({
   name,
   slug,
-  position,
   stages = 0,
   shouldAnimate = false,
 }: BuildingCardProps) {
@@ -53,11 +51,6 @@ export default function BuildingCard({
     prevImageLevelRef.current = imageLevel;
     prevShouldAnimateRef.current = shouldAnimate;
   }, [imageLevel, shouldAnimate]);
-
-  const positionClasses =
-    position === "left"
-      ? "self-start ml-[8%] sm:ml-[15%] md:ml-[20%]"
-      : "self-end mr-[8%] sm:mr-[15%] md:mr-[20%]";
 
   const content = (
     <div className="relative group">
@@ -119,30 +112,20 @@ export default function BuildingCard({
 
   // If complete, render as non-clickable div
   if (isComplete) {
-    return (
-      <div
-        className={`
-          block w-fit
-          ${positionClasses}
-        `}
-      >
-        {content}
-      </div>
-    );
+    return <div className="block w-fit">{content}</div>;
   }
 
   // Otherwise, render as clickable link
   return (
     <Link
       href={`/${slug}`}
-      className={`
+      className="
         block w-fit
         transition-all duration-300 ease-out
         hover:scale-105 hover:-translate-y-1
         active:scale-95
         cursor-pointer
-        ${positionClasses}
-      `}
+      "
     >
       {content}
     </Link>

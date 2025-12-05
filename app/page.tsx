@@ -24,12 +24,12 @@ import {
 } from "@/lib/language";
 
 const buildings = [
-  { name: "Restaurant", slug: "restaurant", position: "left" as const },
-  { name: "Bakery", slug: "bakery", position: "right" as const },
-  { name: "School", slug: "school", position: "left" as const },
-  { name: "Bank", slug: "bank", position: "right" as const },
-  { name: "Hotel", slug: "hotel", position: "left" as const },
-  { name: "Grocery Store", slug: "grocery-store", position: "right" as const },
+  { name: "Bank", slug: "bank", top: "8%", left: "10%" },
+  { name: "Restaurant", slug: "restaurant", top: "8%", right: "10%" },
+  { name: "Bakery", slug: "bakery", top: "35%", left: "8%" },
+  { name: "Grocery Store", slug: "grocery-store", top: "35%", right: "8%" },
+  { name: "Hotel", slug: "hotel", top: "62%", left: "10%" },
+  { name: "School", slug: "school", top: "62%", right: "10%" },
 ];
 
 const difficultyColors: Record<DifficultyLevel, string> = {
@@ -148,9 +148,9 @@ export default function Home() {
   const totalStages = ALL_LOCATIONS.length * STAGES_PER_LOCATION;
 
   return (
-    <div className="py-6 sm:py-8 md:py-10">
+    <div className="py-6 sm:py-8 md:py-10 relative z-10">
       {/* Header with level indicator */}
-      <div className="text-center mb-4 sm:mb-6 md:mb-8 relative">
+      <div className="text-center mb-4 sm:mb-6 md:mb-8 relative z-20 px-4 py-4 sm:px-6 sm:py-6">
         {/* Language picker in top right */}
         {isClient && (
           <div className="absolute top-0 right-0" ref={languageDropdownRef}>
@@ -336,26 +336,37 @@ export default function Home() {
         )}
       </div>
 
-      {/* Buildings with tight/overlapping spacing */}
-      <div className="flex justify-center">
-        <div className="flex flex-col -space-y-16 sm:-space-y-20 md:-space-y-24 w-full max-w-7xl">
-          {buildings.map((building) => (
-            <div
-              key={building.slug}
-              ref={(el) => {
-                buildingRefs.current[building.slug] = el;
-              }}
-            >
-              <BuildingCard
-                name={building.name}
-                slug={building.slug}
-                position={building.position}
-                stages={isClient ? stages[building.slug] ?? 0 : 0}
-                shouldAnimate={buildingToAnimate === building.slug}
-              />
-            </div>
-          ))}
-        </div>
+      {/* Buildings positioned absolutely over background */}
+      <div
+        className="relative w-full min-h-screen z-10"
+        style={{
+          backgroundImage: 'url("/road.png")',
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
+        {buildings.map((building) => (
+          <div
+            key={building.slug}
+            ref={(el) => {
+              buildingRefs.current[building.slug] = el;
+            }}
+            className="absolute"
+            style={{
+              top: building.top,
+              left: building.left,
+              right: building.right,
+            }}
+          >
+            <BuildingCard
+              name={building.name}
+              slug={building.slug}
+              stages={isClient ? stages[building.slug] ?? 0 : 0}
+              shouldAnimate={buildingToAnimate === building.slug}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
