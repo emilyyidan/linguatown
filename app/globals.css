@@ -47,3 +47,181 @@ body {
     transform: scale(1, 1);
   }
 }
+
+/* Town wrapper with fixed 9:16 aspect ratio */
+.town-wrapper {
+  aspect-ratio: 9 / 16;
+  width: 100%;
+  max-width: 1200px;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.town-background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Responsive scaling for small screens */
+/* On very small screens, allow horizontal scrolling or scale down */
+@media (max-width: 768px) {
+  .town-wrapper {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .town-wrapper {
+    max-width: 100%;
+  }
+}
+
+/* For extremely small screens, we can scale down but maintain aspect ratio */
+@media (max-width: 480px) {
+  .town-wrapper {
+    max-width: 100vw;
+    padding: 0 1rem;
+  }
+}
+
+/* Level completion animations */
+@keyframes buildingScaleUp {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes outerGlow {
+  0%, 100% {
+    opacity: 0.4;
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.3),
+                0 0 40px rgba(251, 191, 36, 0.2),
+                0 0 60px rgba(251, 191, 36, 0.1);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5),
+                0 0 60px rgba(251, 191, 36, 0.3),
+                0 0 90px rgba(251, 191, 36, 0.2);
+  }
+}
+
+@keyframes sparkleRise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100px) scale(1);
+  }
+}
+
+@keyframes sparkleFall {
+  0% {
+    opacity: 0;
+    transform: translateY(-50px) scale(0);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100px) scale(1);
+  }
+}
+
+@keyframes decorationReveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Responsive sizing using CSS custom properties from SIZE_CONFIG */
+.building-size-responsive {
+  width: var(--building-size-base, 200px);
+  height: var(--building-size-base, 200px);
+}
+
+@media (min-width: 640px) {
+  .building-size-responsive {
+    width: var(--building-size-sm, 240px);
+    height: var(--building-size-sm, 240px);
+  }
+}
+
+@media (min-width: 768px) {
+  .building-size-responsive {
+    width: var(--building-size-md, 280px);
+    height: var(--building-size-md, 280px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .building-size-responsive {
+    width: var(--building-size-lg, 320px);
+    height: var(--building-size-lg, 320px);
+  }
+}
+
+.decoration-size-responsive {
+  width: var(--decoration-size-base);
+  height: var(--decoration-size-base);
+}
+
+@media (min-width: 640px) {
+  .decoration-size-responsive {
+    width: var(--decoration-size-sm);
+    height: var(--decoration-size-sm);
+  }
+}
+
+/* Update building size reference for proportional decoration positioning */
+.building-container {
+  --current-building-size: var(--building-size-base);
+}
+
+@media (min-width: 640px) {
+  .building-container {
+    --current-building-size: var(--building-size-sm);
+  }
+}
+
+@media (min-width: 768px) {
+  .decoration-size-responsive {
+    width: var(--decoration-size-md);
+    height: var(--decoration-size-md);
+  }
+  .building-container {
+    --current-building-size: var(--building-size-md);
+  }
+}
+
+@media (min-width: 1024px) {
+  .building-container {
+    --current-building-size: var(--building-size-lg);
+  }
+}
