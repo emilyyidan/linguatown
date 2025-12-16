@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { DifficultyLevel } from "@/lib/progress";
 import { buildEvaluationPrompt } from "@/lib/prompts";
-
-function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-  return new OpenAI({ apiKey });
-}
+import { getOpenAIClient } from "@/lib/openai";
 
 interface EvaluateRequest {
   userMessage: string;

@@ -1,6 +1,24 @@
 import { DifficultyLevel } from "./progress";
 
 /**
+ * Conversation context type for passing recent messages to prompts
+ */
+export type ConversationContext = Array<{
+  role: "user" | "assistant";
+  content: string;
+}>;
+
+/**
+ * Number of messages to include in conversation context for API calls
+ */
+export const CONVERSATION_CONTEXT_SIZE = 5;
+
+/**
+ * Number of messages to include in recent context summaries within prompts
+ */
+export const RECENT_CONTEXT_SIZE = 3;
+
+/**
  * Turn limits vary by difficulty level
  */
 export function getTurnLimits(difficulty: DifficultyLevel): { min: number; max: number } {
@@ -296,10 +314,7 @@ export interface BuildHintPromptParams {
   learningLanguage: string;
   nativeLanguage: string;
   difficulty: DifficultyLevel;
-  conversationContext?: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  conversationContext?: ConversationContext;
 }
 
 /**
@@ -314,7 +329,7 @@ export function buildHintPrompt(params: BuildHintPromptParams): string {
   // Build context summary if available
   let contextSummary = "";
   if (conversationContext.length > 0) {
-    const recentContext = conversationContext.slice(-3); // Last 3 messages for context
+    const recentContext = conversationContext.slice(-RECENT_CONTEXT_SIZE);
     contextSummary = `\n\nCONVERSATION CONTEXT:\n${recentContext.map(msg => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`).join("\n")}`;
   }
 
@@ -344,10 +359,7 @@ export interface BuildEvaluationPromptParams {
   learningLanguage: string;
   nativeLanguage: string;
   difficulty: DifficultyLevel;
-  conversationContext?: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  conversationContext?: ConversationContext;
 }
 
 /**
@@ -362,7 +374,7 @@ export function buildEvaluationPrompt(params: BuildEvaluationPromptParams): stri
   // Build context summary if available
   let contextSummary = "";
   if (conversationContext.length > 0) {
-    const recentContext = conversationContext.slice(-3); // Last 3 messages for context
+    const recentContext = conversationContext.slice(-RECENT_CONTEXT_SIZE);
     contextSummary = `\n\nCONVERSATION CONTEXT:\n${recentContext.map(msg => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`).join("\n")}`;
   }
 
@@ -391,5 +403,21 @@ Examples:
 - Vocabulary error: CORRECTION: Use "[correct word]" instead of "[wrong word]". Try: [full corrected sentence]
 
 Be concise (under 100 characters). Provide ONLY the correction, no extra commentary.`;
+}
+
+/**
+ * Map UI messages to conversation context format for API calls
+ * @param messages Array of messages with sender field ("user" | "character")
+ * @param limit Optional limit on number of messages to include (defaults to CONVERSATION_CONTEXT_SIZE)
+ * @returns Conversation context array with last N messages
+ */
+export function mapMessagesToConversationContext(
+  messages: Array<{ sender: "user" | "character"; text: string }>,
+  limit: number = CONVERSATION_CONTEXT_SIZE
+): ConversationContext {
+  return messages.slice(-limit).map((msg) => ({
+    role: msg.sender === "user" ? ("user" as const) : ("assistant" as const),
+    content: msg.text,
+  }));
 }
 

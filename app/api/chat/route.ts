@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { DifficultyLevel } from "@/lib/progress";
-import { getTurnLimits, buildSystemPrompt, buildHintPrompt } from "@/lib/prompts";
-
-function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-  return new OpenAI({ apiKey });
-}
+import { getTurnLimits, buildSystemPrompt, buildHintPrompt, ConversationContext, CONVERSATION_CONTEXT_SIZE } from "@/lib/prompts";
+import { getOpenAIClient } from "@/lib/openai";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -40,11 +32,6 @@ export async function POST(request: NextRequest) {
     const { min: MIN_TURNS, max: MAX_TURNS } = getTurnLimits(difficulty);
     const canEnd = turnCount >= MIN_TURNS;
     const mustEnd = turnCount >= MAX_TURNS;
-    
-    // Debug logging for beginner level
-    if (difficulty === "beginner") {
-      console.log(`[BEGINNER TURN] turnCount: ${turnCount}, canEnd: ${canEnd}, mustEnd: ${mustEnd}, min: ${MIN_TURNS}, max: ${MAX_TURNS}`);
-    }
 
     // Build the system prompt using the prompts module
     const systemPrompt = buildSystemPrompt({
@@ -77,7 +64,6 @@ export async function POST(request: NextRequest) {
     });
 
     const completionId = completion.id;
-    const finishReason = completion.choices[0]?.finish_reason;
     const rawResponseText = completion.choices[0]?.message?.content || "I'm sorry, I didn't catch that. Could you say that again?";
     let responseText = rawResponseText;
     let shouldEnd = mustEnd;
@@ -98,15 +84,21 @@ export async function POST(request: NextRequest) {
     if (difficulty !== "advanced" && !mustEnd && !shouldEnd) {
       // Only generate hint if conversation is continuing (not ending)
       try {
+        // Filter to only user/assistant messages (exclude system messages) and limit context size
+        const conversationContext: ConversationContext = messages
+          .filter((msg) => msg.role === "user" || msg.role === "assistant")
+          .slice(-CONVERSATION_CONTEXT_SIZE)
+          .map((msg) => ({
+            role: msg.role as "user" | "assistant",
+            content: msg.content,
+          }));
+
         const hintPrompt = buildHintPrompt({
           characterMessage: responseText,
           learningLanguage,
           nativeLanguage,
           difficulty,
-          conversationContext: messages.slice(-5).map((msg) => ({
-            role: msg.role === "user" ? ("user" as const) : ("assistant" as const),
-            content: msg.content,
-          })),
+          conversationContext,
         });
 
         const hintCompletion = await openai.chat.completions.create({

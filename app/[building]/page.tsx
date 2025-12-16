@@ -4,21 +4,21 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { use } from "react";
 import ChatInterface from "@/components/ChatInterface";
-import ConversationEnding from "@/components/ConversationEnding";
 import {
   getCharacterName,
   getCharacterRole,
   getOpeningMessage,
+  formatLocationName,
 } from "@/lib/characters";
 import {
-  completeConversation,
   getGlobalLevel,
   getDifficultyDisplayName,
   DifficultyLevel,
 } from "@/lib/progress";
 import { getLearningLanguage, getNativeLanguage } from "@/lib/language";
-import { selectNextTopic, completeTopic } from "@/lib/topicSelection";
+import { selectNextTopic } from "@/lib/topicSelection";
 import { Topic } from "@/lib/topics";
+import { Language } from "@/lib/characters";
 
 interface BuildingPageProps {
   params: Promise<{
@@ -26,24 +26,17 @@ interface BuildingPageProps {
   }>;
 }
 
-function formatBuildingName(slug: string): string {
-  return slug
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 export default function BuildingPage({ params }: BuildingPageProps) {
   const { building } = use(params);
   const [conversationState, setConversationState] = useState<
-    "active" | "ending" | "levelUp"
+    "active" | "levelUp"
   >("active");
   const [isClient, setIsClient] = useState(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("beginner");
   const [newLevel, setNewLevel] = useState<DifficultyLevel | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
-  const [learningLanguage, setLearningLanguage] = useState<string>("en");
-  const [nativeLanguage, setNativeLanguage] = useState<string>("en");
+  const [learningLanguage, setLearningLanguage] = useState<Language>("en");
+  const [nativeLanguage, setNativeLanguage] = useState<Language>("en");
 
   useEffect(() => {
     setIsClient(true);
@@ -57,43 +50,16 @@ export default function BuildingPage({ params }: BuildingPageProps) {
     setSelectedTopic(topic);
   }, [building]);
 
-  const buildingName = formatBuildingName(building);
+  const buildingName = formatLocationName(building);
   const characterName = isClient
-    ? getCharacterName(
-        building,
-        learningLanguage as "en" | "it" | "es" | "fr" | "de"
-      )
+    ? getCharacterName(building, learningLanguage)
     : "";
   const characterRole = isClient
-    ? getCharacterRole(
-        building,
-        learningLanguage as "en" | "it" | "es" | "fr" | "de"
-      )
+    ? getCharacterRole(building, learningLanguage)
     : "";
   const openingMessage = isClient
-    ? getOpeningMessage(
-        building,
-        learningLanguage as "en" | "it" | "es" | "fr" | "de"
-      )
+    ? getOpeningMessage(building, learningLanguage)
     : "";
-
-  const handleConversationEnd = () => {
-    setConversationState("ending");
-  };
-
-  const handleCountdownComplete = () => {
-    // Mark topic as complete (only if topic exists)
-    if (selectedTopic) {
-      completeTopic(building, difficulty, selectedTopic.id);
-    }
-
-    const result = completeConversation(building);
-    if (result.advanced && result.newLevel) {
-      setNewLevel(result.newLevel);
-      setConversationState("levelUp");
-    }
-    // Navigation happens in ConversationEnding component
-  };
 
   // Show loading state while hydrating
   if (!isClient) {
@@ -143,38 +109,36 @@ export default function BuildingPage({ params }: BuildingPageProps) {
 
   return (
     <div className="py-8 sm:py-12 min-h-screen">
-      {conversationState === "active" ? (
-        <>
-          <div className="flex items-center justify-between mb-6">
-            <Link
-              href="/"
-              className="
-                inline-flex items-center gap-2
-                text-[#2d5a3d] font-semibold
-                hover:text-[#4a7c59]
-                transition-colors duration-200
-              "
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M19 12H5" />
-                <path d="M12 19l-7-7 7-7" />
-              </svg>
-              <span>Back to Town</span>
-            </Link>
+      <div className="flex items-center justify-between mb-6">
+        <Link
+          href="/"
+          className="
+            inline-flex items-center gap-2
+            text-[#2d5a3d] font-semibold
+            hover:text-[#4a7c59]
+            transition-colors duration-200
+          "
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M19 12H5" />
+            <path d="M12 19l-7-7 7-7" />
+          </svg>
+          <span>Back to Town</span>
+        </Link>
 
-            {/* Difficulty indicator */}
-            <span
-              className={`
+        {/* Difficulty indicator */}
+        <span
+          className={`
               px-3 py-1 rounded-full text-sm font-medium
               ${
                 difficulty === "beginner"
@@ -185,34 +149,26 @@ export default function BuildingPage({ params }: BuildingPageProps) {
               }
               text-white
             `}
-            >
-              {getDifficultyDisplayName(difficulty)}
-            </span>
-          </div>
+        >
+          {getDifficultyDisplayName(difficulty)}
+        </span>
+      </div>
 
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#2d5a3d] mb-6">
-            {buildingName}
-          </h1>
+      <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#2d5a3d] mb-6">
+        {buildingName}
+      </h1>
 
-          <ChatInterface
-            characterName={characterName}
-            role={characterRole}
-            location={buildingName}
-            openingMessage={openingMessage}
-            difficulty={difficulty}
-            topic={selectedTopic || undefined}
-            nativeLanguage={nativeLanguage}
-            learningLanguage={learningLanguage}
-            onConversationEnd={handleConversationEnd}
-            buildingSlug={building}
-          />
-        </>
-      ) : (
-        <ConversationEnding
-          onComplete={handleCountdownComplete}
-          buildingSlug={building}
-        />
-      )}
+      <ChatInterface
+        characterName={characterName}
+        role={characterRole}
+        location={buildingName}
+        openingMessage={openingMessage}
+        difficulty={difficulty}
+        topic={selectedTopic || undefined}
+        nativeLanguage={nativeLanguage}
+        learningLanguage={learningLanguage}
+        buildingSlug={building}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DifficultyLevel } from "@/lib/progress";
 import { completeConversation } from "@/lib/progress";
 import { completeTopic } from "@/lib/topicSelection";
+import { mapMessagesToConversationContext, CONVERSATION_CONTEXT_SIZE } from "@/lib/prompts";
 
 interface Message {
   id: string;
@@ -258,7 +259,7 @@ export default function ChatInterface({
       }));
 
       // Prepare conversation context for evaluation (last few messages)
-      const conversationContext = apiMessages.slice(-5); // Last 5 messages for context
+      const conversationContext = mapMessagesToConversationContext(newMessages, CONVERSATION_CONTEXT_SIZE);
 
       // Call both APIs in parallel
       const [chatResponse, evaluationResponse] = await Promise.allSettled([
@@ -467,10 +468,7 @@ export default function ChatInterface({
             learningLanguage,
             nativeLanguage,
             difficulty,
-            conversationContext: messages.slice(-5).map((msg) => ({
-              role: msg.sender === "user" ? ("user" as const) : ("assistant" as const),
-              content: msg.text,
-            })),
+            conversationContext: mapMessagesToConversationContext(messages, CONVERSATION_CONTEXT_SIZE),
           }),
         });
 

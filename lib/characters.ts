@@ -178,7 +178,7 @@ export function getOpeningMessage(slug: string, language: Language = "en"): stri
   return character?.openingMessage[language] ?? "";
 }
 
-function formatLocationName(slug: string): string {
+export function formatLocationName(slug: string): string {
   return slug
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
