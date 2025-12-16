@@ -95,7 +95,7 @@ function calculateDecorationPosition(
   const style: Record<string, string> = {};
 
   // Vertical positioning
-  if ("top" in config && config.top) {
+  if ("top" in config && config.top && typeof config.top === "string") {
     style.top = config.top;
   } else if ("topOffset" in config && config.topOffset !== undefined) {
     style.top = `calc(var(--current-building-size) * ${config.topOffset})`;
@@ -106,7 +106,7 @@ function calculateDecorationPosition(
       : `${config.topPx}px`;
   }
 
-  if ("bottom" in config && config.bottom) {
+  if ("bottom" in config && config.bottom && typeof config.bottom === "string") {
     style.bottom = config.bottom;
   } else if ("bottomOffset" in config && config.bottomOffset !== undefined) {
     style.bottom = `calc(var(--current-building-size) * ${config.bottomOffset})`;
@@ -121,8 +121,8 @@ function calculateDecorationPosition(
   if ("center" in config && config.center) {
     style.left = "50%";
     style.transform = "translateX(-50%)";
-  } else if ("left" in config && config.left) {
-    style.left = String(config.left);
+  } else if ("left" in config && config.left && typeof config.left === "string") {
+    style.left = config.left;
   } else if ("leftOffset" in config && config.leftOffset !== undefined) {
     style.left = `calc(var(--current-building-size) * ${config.leftOffset})`;
   }
@@ -136,7 +136,7 @@ function calculateDecorationPosition(
     }
   }
 
-  if ("right" in config && config.right) {
+  if ("right" in config && config.right && typeof config.right === "string") {
     style.right = config.right;
   } else if ("rightOffset" in config && config.rightOffset !== undefined) {
     style.right = `calc(var(--current-building-size) * ${config.rightOffset})`;

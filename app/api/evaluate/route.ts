@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DifficultyLevel } from "@/lib/progress";
-import { buildEvaluationPrompt } from "@/lib/prompts";
+import { buildEvaluationPrompt, ConversationContext } from "@/lib/prompts";
 import { getOpenAIClient } from "@/lib/openai";
 
 interface EvaluateRequest {
@@ -8,10 +8,7 @@ interface EvaluateRequest {
   learningLanguage: string;
   nativeLanguage: string;
   difficulty: DifficultyLevel;
-  conversationContext?: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  conversationContext?: ConversationContext;
 }
 
 export async function POST(request: NextRequest) {
@@ -75,6 +72,3 @@ export async function POST(request: NextRequest) {
     });
   }
 }
-
-
-

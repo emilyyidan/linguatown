@@ -1,5 +1,8 @@
 import { Language } from "./characters";
 
+// Re-export Language type for convenience
+export type { Language };
+
 const NATIVE_LANGUAGE_KEY = "lingua-town-native-language";
 const LEARNING_LANGUAGE_KEY = "lingua-town-learning-language";
 

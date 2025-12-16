@@ -29,7 +29,7 @@ interface ChatInterfaceProps {
   topic?: Topic;
   nativeLanguage: string;
   learningLanguage: string;
-  onConversationEnd: () => void;
+  onConversationEnd?: () => void;
   buildingSlug?: string;
 }
 
@@ -101,7 +101,7 @@ export default function ChatInterface({
           router.push(url);
         } else {
           // Fallback to original behavior if no buildingSlug
-          onConversationEnd();
+          onConversationEnd?.();
         }
       }, 1500); // Wait 1.5 seconds to show "0" and complete the circle animation
       return () => clearTimeout(navigationTimer);
@@ -831,7 +831,7 @@ export default function ChatInterface({
               "
             />
             <button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={!inputValue.trim() || isTyping || isLoadingOpening}
               className="
                 px-6 py-2 rounded-full
