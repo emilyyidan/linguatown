@@ -204,6 +204,7 @@ export default function BuildingPage({ params }: BuildingPageProps) {
             nativeLanguage={nativeLanguage}
             learningLanguage={learningLanguage}
             onConversationEnd={handleConversationEnd}
+            buildingSlug={building}
           />
         </>
       ) : (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { DifficultyLevel } from "@/lib/progress";
-import { getTurnLimits, buildSystemPrompt } from "@/lib/prompts";
+import { getTurnLimits, buildSystemPrompt, buildHintPrompt } from "@/lib/prompts";
 
 function getOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -40,6 +40,11 @@ export async function POST(request: NextRequest) {
     const { min: MIN_TURNS, max: MAX_TURNS } = getTurnLimits(difficulty);
     const canEnd = turnCount >= MIN_TURNS;
     const mustEnd = turnCount >= MAX_TURNS;
+    
+    // Debug logging for beginner level
+    if (difficulty === "beginner") {
+      console.log(`[BEGINNER TURN] turnCount: ${turnCount}, canEnd: ${canEnd}, mustEnd: ${mustEnd}, min: ${MIN_TURNS}, max: ${MAX_TURNS}`);
+    }
 
     // Build the system prompt using the prompts module
     const systemPrompt = buildSystemPrompt({
@@ -56,6 +61,8 @@ export async function POST(request: NextRequest) {
     });
 
     const openai = getOpenAIClient();
+    
+    // First call: Get the character's message
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -69,7 +76,10 @@ export async function POST(request: NextRequest) {
       temperature: 0.8,
     });
 
-    let responseText = completion.choices[0]?.message?.content || "I'm sorry, I didn't catch that. Could you say that again?";
+    const completionId = completion.id;
+    const finishReason = completion.choices[0]?.finish_reason;
+    const rawResponseText = completion.choices[0]?.message?.content || "I'm sorry, I didn't catch that. Could you say that again?";
+    let responseText = rawResponseText;
     let shouldEnd = mustEnd;
 
     // Parse the [CONTINUE] or [END] tag if present
@@ -83,17 +93,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Parse hint from response (for beginner and intermediate only)
+    // Second call: Generate hint if needed (for beginner/intermediate, when not ending)
     let hint: string | undefined;
-    if (difficulty !== "advanced") {
-      // Improved regex: match HINT: (case-insensitive) followed by whitespace, then capture everything
-      // Use [\s\S] instead of . with 's' flag for better compatibility
-      // This handles multi-line hints and ensures we capture the complete hint text
-      const hintMatch = responseText.match(/HINT:\s*([\s\S]+?)(?:\n\n|\n*$)/i);
-      if (hintMatch) {
-        hint = hintMatch[1].trim();
-        // Remove hint from response text - match the entire hint including the HINT: prefix
-        responseText = responseText.replace(/HINT:\s*[\s\S]+?(?:\n\n|\n*$)/i, "").trim();
+    if (difficulty !== "advanced" && !mustEnd && !shouldEnd) {
+      // Only generate hint if conversation is continuing (not ending)
+      try {
+        const hintPrompt = buildHintPrompt({
+          characterMessage: responseText,
+          learningLanguage,
+          nativeLanguage,
+          difficulty,
+          conversationContext: messages.slice(-5).map((msg) => ({
+            role: msg.role === "user" ? ("user" as const) : ("assistant" as const),
+            content: msg.content,
+          })),
+        });
+
+        const hintCompletion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: hintPrompt },
+            { role: "user", content: "Generate the hint." },
+          ],
+          max_tokens: 100,
+          temperature: 0.7,
+        });
+
+        hint = hintCompletion.choices[0]?.message?.content?.trim();
+        
+        if (!hint) {
+          console.warn("[HINT GENERATION FAILED] OpenAI ID:", completionId, {
+            difficulty,
+            turnCount,
+            characterMessage: responseText,
+          });
+        }
+      } catch (error) {
+        console.error("Error generating hint:", error);
+        // Don't block the response if hint generation fails
       }
     }
 

@@ -6,7 +6,9 @@ import { DifficultyLevel } from "./progress";
 export function getTurnLimits(difficulty: DifficultyLevel): { min: number; max: number } {
   switch (difficulty) {
     case "beginner":
-      return { min: 2, max: 3 }; // Short, focused conversations
+      // Beginner: LLM speaks 4 times (opening + 3 responses), user speaks 3 times
+      // After 3 user messages (turnCount = 3), LLM sends final wrap-up (no questions, no hint)
+      return { min: 2, max: 3 };
     case "intermediate":
       return { min: 3, max: 4 }; // Moderate length
     case "advanced":
@@ -217,12 +219,15 @@ You must respond ONLY in ${learningLanguageName}. The user's native language is 
     ? `CONVERSATION TOPIC: ${topic.name}
 ${topic.description}
 
-You should initiate this conversation naturally. Start by greeting the customer and then guide the conversation toward this topic. Make it feel natural and contextual to your role as a ${role} at the ${location}.`
+You should initiate this conversation naturally. Start by greeting the user and then guide the conversation toward this topic. Make it feel natural and contextual to your role as a ${role} at the ${location}.`
     : getScenarioPrompt(location, difficulty);
 
   if (mustEnd) {
     const closingGuidance = difficulty === "beginner"
-      ? "Keep it very brief and simple (1 sentence). Thank them warmly."
+      ? `⚠️ CRITICAL: This is the FINAL message of the conversation. You MUST:
+1. Wrap up the conversation naturally
+2. Do NOT ask any questions - this is a closing statement, not a question
+3. Do NOT include any hints`
       : difficulty === "intermediate"
       ? "Thank them warmly and reference something specific from the conversation. Keep it brief (1-2 sentences)."
       : "Thank them warmly and reference something meaningful from your discussion. You can be slightly more elaborate (2-3 sentences) given the depth of conversation.";
@@ -230,22 +235,22 @@ You should initiate this conversation naturally. Start by greeting the customer 
     return `You are ${characterName}, a friendly ${role} at the ${location}.
 ${languageInstruction}
 
-This is the END of the conversation. Wrap up naturally based on what was discussed.
+⚠️ THIS IS THE END OF THE CONVERSATION - FINAL MESSAGE REQUIRED ⚠️
 ${closingGuidance}
+
+CRITICAL RULES FOR THIS FINAL MESSAGE:
+- Do NOT ask any questions
+- Do NOT include hints
+- Do NOT use [CONTINUE] or [END] tags
+- Simply provide a warm closing statement
 
 Respond with ONLY your closing message.`;
   } else if (canEnd) {
     const endGuidance = difficulty === "beginner" 
-      ? "Since this is a beginner conversation, wrap up soon unless there's a critical detail to cover. Keep it brief and friendly."
+      ? `The user will respond after your message. You can choose to continue the conversation or signal that it's coming to an end. If the conversation feels complete, you can use [END] to indicate that. Keep responses brief and friendly.`
       : difficulty === "intermediate"
       ? "Based on how the conversation has flowed, decide whether to continue or wrap up naturally."
-      : "You can continue exploring this topic in depth. Only wrap up when the conversation has reached a natural, satisfying conclusion.";
-
-    const hintInstruction = difficulty === "beginner"
-      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}. For example: HINT: Tell them you couldn't find the item you were looking for.`
-      : difficulty === "intermediate"
-      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}.`
-      : "";
+      : "You can continue exploring this topic.";
 
     return `You are ${characterName}, a friendly ${role} at the ${location}.
 ${languageInstruction}
@@ -256,15 +261,16 @@ ${styleGuidelines}
 
 ${endGuidance}
 
-IMPORTANT: Start your response with [CONTINUE] or [END], then your message.
-If ending, give a warm, natural goodbye that references the conversation.${hintInstruction}`;
-  } else {
-    const hintInstruction = difficulty === "beginner"
-      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response to your message, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}. For example, if you ask "Did you find everything you were looking for?" in ${learningLanguageName}, your hint might be: HINT: Let the clerk know that you could not find the item you were looking for.`
-      : difficulty === "intermediate"
-      ? `\nIMPORTANT: After your response, generate a helpful hint in ${nativeLanguageName} (the user's native language). Format it as: HINT: [guidance or instruction on what the user could communicate in response to your message, written entirely in ${nativeLanguageName}]. The hint should be guidance/instructions only, NOT an example phrase in ${learningLanguageName}.`
-      : "";
+RESPONSE FORMAT:
+Start your response with [CONTINUE] or [END], then write your message in ${learningLanguageName}.
 
+Example:
+[CONTINUE] Perfetto! Vuoi pagare con contante o carta di credito?
+
+or
+
+[END] Grazie mille! È stato un piacere aiutarti.`;
+  } else {
     return `You are ${characterName}, a friendly ${role} at the ${location}.
 ${languageInstruction}
 
@@ -276,8 +282,58 @@ Guidelines:
 - Stay in character naturally
 - Keep responses concise but warm
 - Move the conversation forward
-- Don't be overly formal or verbose${hintInstruction}`;
+- Don't be overly formal or verbose
+
+Write your message in ${learningLanguageName}.`;
   }
+}
+
+/**
+ * Parameters for building a hint generation prompt
+ */
+export interface BuildHintPromptParams {
+  characterMessage: string;
+  learningLanguage: string;
+  nativeLanguage: string;
+  difficulty: DifficultyLevel;
+  conversationContext?: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
+}
+
+/**
+ * Build the prompt for generating a hint based on the character's message
+ */
+export function buildHintPrompt(params: BuildHintPromptParams): string {
+  const { characterMessage, learningLanguage, nativeLanguage, difficulty, conversationContext = [] } = params;
+  
+  const learningLanguageName = getLanguageName(learningLanguage);
+  const nativeLanguageName = getLanguageName(nativeLanguage);
+  
+  // Build context summary if available
+  let contextSummary = "";
+  if (conversationContext.length > 0) {
+    const recentContext = conversationContext.slice(-3); // Last 3 messages for context
+    contextSummary = `\n\nCONVERSATION CONTEXT:\n${recentContext.map(msg => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`).join("\n")}`;
+  }
+
+  return `You are a language learning assistant. A character just said this to a student learning ${learningLanguageName}:
+
+CHARACTER'S MESSAGE:
+${characterMessage}
+
+${contextSummary}
+
+Generate a helpful hint in ${nativeLanguageName} (the student's native language) about what the student could say in response. 
+
+The hint should be:
+- Written entirely in ${nativeLanguageName}
+- Guidance/instructions only, NOT an example phrase in ${learningLanguageName}
+- Brief and clear (under 20 words)
+- Appropriate for ${difficulty} level
+
+Provide ONLY the hint text, nothing else. Do not include "HINT:" prefix or any other formatting.`;
 }
 
 /**

@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DifficultyLevel } from "@/lib/progress";
+import { completeConversation } from "@/lib/progress";
+import { completeTopic } from "@/lib/topicSelection";
 
 interface Message {
   id: string;
@@ -26,6 +29,7 @@ interface ChatInterfaceProps {
   nativeLanguage: string;
   learningLanguage: string;
   onConversationEnd: () => void;
+  buildingSlug?: string;
 }
 
 export default function ChatInterface({
@@ -38,20 +42,31 @@ export default function ChatInterface({
   nativeLanguage,
   learningLanguage,
   onConversationEnd,
+  buildingSlug,
 }: ChatInterfaceProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [turnCount, setTurnCount] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [isLoadingOpening, setIsLoadingOpening] = useState(true);
   const [topicGuidance, setTopicGuidance] = useState<string | undefined>(
     undefined
   );
   const [currentHint, setCurrentHint] = useState<string | undefined>();
   const [showHint, setShowHint] = useState(false); // For intermediate level
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const isOpeningMessageLoadingRef = useRef(false);
+  const isSendingRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,10 +74,47 @@ export default function ChatInterface({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, countdown]);
+
+  // Handle countdown when conversation is ending
+  useEffect(() => {
+    if (countdown !== null && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown((prev) => (prev !== null ? prev - 1 : null));
+      }, 1500); // 1.5 seconds between each countdown number
+      return () => clearTimeout(timer);
+    } else if (countdown === 0) {
+      // Countdown finished, wait a moment to show "0" and complete circle, then navigate
+      const navigationTimer = setTimeout(() => {
+        if (buildingSlug) {
+          // Mark topic as complete (only if topic exists)
+          if (topic) {
+            completeTopic(buildingSlug, difficulty, topic.id);
+          }
+          
+          // Complete conversation
+          completeConversation(buildingSlug);
+          
+          // Navigate directly to home with building slug
+          const url = `/?building=${buildingSlug}`;
+          router.push(url);
+        } else {
+          // Fallback to original behavior if no buildingSlug
+          onConversationEnd();
+        }
+      }, 1500); // Wait 1.5 seconds to show "0" and complete the circle animation
+      return () => clearTimeout(navigationTimer);
+    }
+  }, [countdown, buildingSlug, topic, difficulty, router, onConversationEnd]);
 
   // Generate opening message from API based on topic
   useEffect(() => {
+    // Guard against React StrictMode double-invocation in development
+    if (isOpeningMessageLoadingRef.current) {
+      return;
+    }
+    isOpeningMessageLoadingRef.current = true;
+
     const generateOpeningMessage = async () => {
       setIsLoadingOpening(true);
       try {
@@ -144,17 +196,47 @@ export default function ChatInterface({
   }, [isLoadingOpening]);
 
   useEffect(() => {
-    if (!isTyping && !isEnding && !isLoadingOpening) {
+    if (!isTyping && !isEnding && !isLoadingOpening && !voiceMode) {
       inputRef.current?.focus();
     }
-  }, [isTyping, isEnding, isLoadingOpening]);
+  }, [isTyping, isEnding, isLoadingOpening, voiceMode]);
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isTyping || isEnding) return;
+  // Cleanup audio stream on unmount or when switching modes
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+      }
+    };
+  }, []);
+
+  // Stop recording if switching away from voice mode
+  useEffect(() => {
+    if (!voiceMode && isRecording && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    }
+  }, [voiceMode, isRecording]);
+
+  const handleSend = async (textToSend?: string) => {
+    const text = textToSend || inputValue.trim();
+    if (!text || isTyping || isEnding || isSendingRef.current) return;
+    
+    // Guard against React StrictMode double-invocation and race conditions
+    isSendingRef.current = true;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
-      text: inputValue.trim(),
+      text: text,
       sender: "user",
     };
 
@@ -235,16 +317,23 @@ export default function ChatInterface({
         setTopicGuidance(data.topicGuidance);
       }
 
-      // Store hint if provided (for beginner and intermediate)
-      // Only update hint if a new non-empty one is provided - preserve existing hint if not
-      if (data.hint && data.hint.trim()) {
-        setCurrentHint(data.hint.trim());
-        // For intermediate, reset showHint so user needs to click to see it
-        if (difficulty === "intermediate") {
-          setShowHint(false);
+      // Handle hints: for beginner and intermediate, hints should always be provided with every LLM response
+      // The only difference is UI: beginner shows immediately, intermediate hides behind a button
+      if (difficulty !== "advanced") {
+        // Always clear the old hint when a new character message arrives
+        setCurrentHint(undefined);
+        setShowHint(false);
+        
+        // Set the new hint (should always be provided for beginner/intermediate)
+        if (data.hint && data.hint.trim()) {
+          setCurrentHint(data.hint.trim());
+          // For intermediate, keep showHint false so user needs to click to see it
+          // For beginner, showHint doesn't matter since hint is always visible
+        } else {
+          // Log warning if hint is missing when it should be provided
+          console.warn("Expected hint for difficulty level", difficulty, "but none was provided");
         }
       }
-      // If data.hint is undefined, null, or empty, preserve the current hint (don't clear it)
 
       // Always add the character's response
       const characterResponse: Message = {
@@ -284,13 +373,10 @@ export default function ChatInterface({
       }
       // If evaluation failed or timed out, just continue without correction
 
-      // If conversation should end, show the message briefly then transition
+      // If conversation should end, start countdown
       if (data.shouldEnd) {
         setIsEnding(true);
-        // Give user time to read the closing message
-        setTimeout(() => {
-          onConversationEnd();
-        }, 2000);
+        setCountdown(3);
       }
     } catch (error) {
       console.error("Chat error:", error);
@@ -302,6 +388,9 @@ export default function ChatInterface({
       };
       setMessages((prev) => [...prev, fallbackResponse]);
       setIsTyping(false);
+    } finally {
+      // Always reset the sending guard
+      isSendingRef.current = false;
     }
   };
 
@@ -309,6 +398,104 @@ export default function ChatInterface({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks
+        stream.getTracks().forEach((track) => track.stop());
+        
+        // Process the recorded audio
+        await processVoiceRecording();
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      alert("Unable to access microphone. Please check your permissions.");
+      setVoiceMode(false); // Fallback to text mode
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setIsProcessingVoice(true);
+    }
+  };
+
+  const processVoiceRecording = async () => {
+    try {
+      // Create a blob from audio chunks
+      const audioBlob = new Blob(audioChunksRef.current, {
+        type: "audio/webm;codecs=opus",
+      });
+
+      // Convert blob to base64 for sending to API
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      
+      reader.onloadend = async () => {
+        const base64Audio = reader.result as string;
+        const base64Data = base64Audio.split(",")[1]; // Remove data URL prefix
+
+        // Send to voice streaming API
+        const response = await fetch("/api/voice/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audio: base64Data,
+            learningLanguage,
+            nativeLanguage,
+            difficulty,
+            conversationContext: messages.slice(-5).map((msg) => ({
+              role: msg.sender === "user" ? ("user" as const) : ("assistant" as const),
+              content: msg.text,
+            })),
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to transcribe audio");
+        }
+
+        const data = await response.json();
+        const transcribedText = data.transcription;
+
+        if (transcribedText && transcribedText.trim()) {
+          // Use the transcribed text and handle it through the normal flow
+          // handleSend will handle evaluation, chat response, and hints
+          await handleSend(transcribedText.trim());
+        } else {
+          alert("Could not transcribe audio. Please try again.");
+        }
+
+        setIsProcessingVoice(false);
+        audioChunksRef.current = [];
+      };
+    } catch (error) {
+      console.error("Error processing voice recording:", error);
+      alert("Error processing voice recording. Please try again.");
+      setIsProcessingVoice(false);
     }
   };
 
@@ -322,9 +509,65 @@ export default function ChatInterface({
       )}
 
       {/* Character header */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-t-2xl px-4 py-3 border-b border-[#b8d4be]">
-        <h2 className="font-bold text-[#2d5a3d] text-lg">{characterName}</h2>
-        <p className="text-sm text-[#4a7c59] capitalize">{role}</p>
+      <div className="bg-white/80 backdrop-blur-sm rounded-t-2xl px-4 py-3 border-b border-[#b8d4be] flex items-center justify-between">
+        <div>
+          <h2 className="font-bold text-[#2d5a3d] text-lg">{characterName}</h2>
+          <p className="text-sm text-[#4a7c59] capitalize">{role}</p>
+        </div>
+        {/* Voice/Text mode toggle */}
+        <button
+          onClick={() => setVoiceMode(!voiceMode)}
+          disabled={isRecording || isProcessingVoice || isTyping || isLoadingOpening}
+          className="
+            flex items-center gap-2 px-3 py-1.5 rounded-full
+            bg-white border-2 border-[#4a7c59]/30
+            hover:border-[#4a7c59] hover:bg-[#e8f5e9]
+            transition-all duration-200
+            disabled:opacity-50 disabled:cursor-not-allowed
+            text-sm font-medium text-[#2d5a3d]
+          "
+          title={voiceMode ? "Switch to text mode" : "Switch to voice mode"}
+        >
+          {voiceMode ? (
+            <>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+              <span>Voice</span>
+            </>
+          ) : (
+            <>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+              <span>Text</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Messages area */}
@@ -398,6 +641,45 @@ export default function ChatInterface({
           </div>
         )}
 
+        {/* Countdown display in chat */}
+        {countdown !== null && countdown >= 0 && (
+          <div className="flex justify-center py-4">
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-sm text-[#4a7c59] font-medium">
+                Conversation complete! Returning to town...
+              </p>
+              <div className="relative w-16 h-16">
+                {/* Circular progress indicator */}
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="28"
+                    fill="none"
+                    stroke="#e8f5e9"
+                    strokeWidth="6"
+                  />
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="28"
+                    fill="none"
+                    stroke="#4a7c59"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeDasharray={`${((3 - countdown) / 3) * 175.93} 175.93`}
+                    className="transition-all duration-1500 ease-linear"
+                  />
+                </svg>
+                {/* Countdown number */}
+                <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-[#2d5a3d]">
+                  {countdown}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -446,6 +728,91 @@ export default function ChatInterface({
           <p className="text-center text-[#4a7c59] font-medium py-2">
             Conversation ending...
           </p>
+        ) : voiceMode ? (
+          <div className="flex flex-col items-center gap-3">
+            {isRecording ? (
+              <>
+                <div className="flex items-center gap-2 text-[#4a7c59]">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium">Recording...</span>
+                </div>
+                <button
+                  onClick={stopRecording}
+                  className="
+                    px-8 py-3 rounded-full
+                    bg-red-500 text-white font-semibold
+                    hover:bg-red-600 active:scale-95
+                    transition-all duration-200
+                    flex items-center gap-2
+                  "
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                  Stop & Submit
+                </button>
+              </>
+            ) : isProcessingVoice ? (
+              <div className="flex items-center gap-2 text-[#4a7c59]">
+                <span className="inline-flex gap-1">
+                  <span
+                    className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
+                </span>
+                <span className="text-sm font-medium">Processing...</span>
+              </div>
+            ) : (
+              <button
+                onClick={startRecording}
+                disabled={isTyping || isLoadingOpening}
+                className="
+                  px-8 py-3 rounded-full
+                  bg-[#4a7c59] text-white font-semibold
+                  hover:bg-[#3d6b4a] active:scale-95
+                  transition-all duration-200
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  flex items-center gap-2
+                "
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                Start Recording
+              </button>
+            )}
+          </div>
         ) : (
           <div className="flex gap-2">
             <input
