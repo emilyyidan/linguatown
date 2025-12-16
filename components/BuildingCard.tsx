@@ -15,7 +15,7 @@ interface BuildingCardProps {
 const SIZE_CONFIG = {
   // Building sizes in pixels (responsive breakpoints)
   building: {
-    base: 200, // Mobile (default)
+    base: 170, // Mobile (default) - reduced by 15% from 200px for iPhone 17
     sm: 240, // Small screens
     md: 280, // Medium screens
     lg: 320, // Large screens

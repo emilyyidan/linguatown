@@ -58,7 +58,6 @@ export default function ChatInterface({
   );
   const [currentHint, setCurrentHint] = useState<string | undefined>();
   const [showHint, setShowHint] = useState(false); // For intermediate level
-  const [voiceMode, setVoiceMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -197,10 +196,10 @@ export default function ChatInterface({
   }, [isLoadingOpening]);
 
   useEffect(() => {
-    if (!isTyping && !isEnding && !isLoadingOpening && !voiceMode) {
+    if (!isTyping && !isEnding && !isLoadingOpening && !isRecording) {
       inputRef.current?.focus();
     }
-  }, [isTyping, isEnding, isLoadingOpening, voiceMode]);
+  }, [isTyping, isEnding, isLoadingOpening, isRecording]);
 
   // Cleanup audio stream on unmount or when switching modes
   useEffect(() => {
@@ -216,17 +215,6 @@ export default function ChatInterface({
     };
   }, []);
 
-  // Stop recording if switching away from voice mode
-  useEffect(() => {
-    if (!voiceMode && isRecording && mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-    }
-  }, [voiceMode, isRecording]);
 
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || inputValue.trim();
@@ -402,14 +390,49 @@ export default function ChatInterface({
     }
   };
 
+  const toggleRecording = async () => {
+    if (isRecording) {
+      // Stop recording
+      stopRecording();
+    } else {
+      // Start recording
+      await startRecording();
+    }
+  };
+
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Microphone access is not supported in this browser.");
+        return;
+      }
+
+      // Request microphone access with proper constraints for mobile
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        } 
+      });
       streamRef.current = stream;
       
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
+      // Try to use webm, fallback to default if not supported
+      let mimeType = "audio/webm;codecs=opus";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        // Try alternatives for better mobile support
+        if (MediaRecorder.isTypeSupported("audio/webm")) {
+          mimeType = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else {
+          // Use default
+          mimeType = "";
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -421,7 +444,10 @@ export default function ChatInterface({
 
       mediaRecorder.onstop = async () => {
         // Stop all tracks
-        stream.getTracks().forEach((track) => track.stop());
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+        }
         
         // Process the recorded audio
         await processVoiceRecording();
@@ -429,10 +455,22 @@ export default function ChatInterface({
 
       mediaRecorder.start();
       setIsRecording(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error accessing microphone:", error);
-      alert("Unable to access microphone. Please check your permissions.");
-      setVoiceMode(false); // Fallback to text mode
+      let errorMessage = "Unable to access microphone. ";
+      
+      if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+        errorMessage += "Please grant microphone permissions in your browser settings.";
+      } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+        errorMessage += "No microphone found. Please connect a microphone.";
+      } else if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+        errorMessage += "Microphone is already in use by another application.";
+      } else {
+        errorMessage += "Please check your permissions and try again.";
+      }
+      
+      alert(errorMessage);
+      setIsRecording(false);
     }
   };
 
@@ -447,8 +485,11 @@ export default function ChatInterface({
   const processVoiceRecording = async () => {
     try {
       // Create a blob from audio chunks
+      const blobType = audioChunksRef.current.length > 0 
+        ? audioChunksRef.current[0].type 
+        : "audio/webm;codecs=opus";
       const audioBlob = new Blob(audioChunksRef.current, {
-        type: "audio/webm;codecs=opus",
+        type: blobType,
       });
 
       // Convert blob to base64 for sending to API
@@ -480,9 +521,12 @@ export default function ChatInterface({
         const transcribedText = data.transcription;
 
         if (transcribedText && transcribedText.trim()) {
-          // Use the transcribed text and handle it through the normal flow
-          // handleSend will handle evaluation, chat response, and hints
-          await handleSend(transcribedText.trim());
+          // Set the transcribed text in the input field instead of sending automatically
+          setInputValue(transcribedText.trim());
+          // Focus the input so user can review/edit before submitting
+          setTimeout(() => {
+            inputRef.current?.focus();
+          }, 100);
         } else {
           alert("Could not transcribe audio. Please try again.");
         }
@@ -507,65 +551,11 @@ export default function ChatInterface({
       )}
 
       {/* Character header */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-t-2xl px-4 py-3 border-b border-[#b8d4be] flex items-center justify-between">
+      <div className="bg-white/80 backdrop-blur-sm rounded-t-2xl px-4 py-3 border-b border-[#b8d4be]">
         <div>
           <h2 className="font-bold text-[#2d5a3d] text-lg">{characterName}</h2>
           <p className="text-sm text-[#4a7c59] capitalize">{role}</p>
         </div>
-        {/* Voice/Text mode toggle */}
-        <button
-          onClick={() => setVoiceMode(!voiceMode)}
-          disabled={isRecording || isProcessingVoice || isTyping || isLoadingOpening}
-          className="
-            flex items-center gap-2 px-3 py-1.5 rounded-full
-            bg-white border-2 border-[#4a7c59]/30
-            hover:border-[#4a7c59] hover:bg-[#e8f5e9]
-            transition-all duration-200
-            disabled:opacity-50 disabled:cursor-not-allowed
-            text-sm font-medium text-[#2d5a3d]
-          "
-          title={voiceMode ? "Switch to text mode" : "Switch to voice mode"}
-        >
-          {voiceMode ? (
-            <>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-              <span>Voice</span>
-            </>
-          ) : (
-            <>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-              <span>Text</span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* Messages area */}
@@ -726,24 +716,27 @@ export default function ChatInterface({
           <p className="text-center text-[#4a7c59] font-medium py-2">
             Conversation ending...
           </p>
-        ) : voiceMode ? (
-          <div className="flex flex-col items-center gap-3">
-            {isRecording ? (
-              <>
-                <div className="flex items-center gap-2 text-[#4a7c59]">
-                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  <span className="text-sm font-medium">Recording...</span>
-                </div>
-                <button
-                  onClick={stopRecording}
-                  className="
-                    px-8 py-3 rounded-full
-                    bg-red-500 text-white font-semibold
-                    hover:bg-red-600 active:scale-95
-                    transition-all duration-200
-                    flex items-center gap-2
-                  "
-                >
+        ) : (
+          <>
+            <div className="flex gap-2">
+              {/* Microphone button */}
+              <button
+                onClick={toggleRecording}
+                disabled={isProcessingVoice || isTyping || isLoadingOpening}
+                className={`
+                  px-4 py-2 rounded-full
+                  border-2 transition-all duration-200
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  flex items-center justify-center
+                  ${
+                    isRecording
+                      ? "bg-red-500 border-red-600 text-white hover:bg-red-600"
+                      : "bg-white border-[#4a7c59]/30 text-[#2d5a3d] hover:border-[#4a7c59] hover:bg-[#e8f5e9]"
+                  }
+                `}
+                title={isRecording ? "Stop recording" : "Start recording"}
+              >
+                {isRecording ? (
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="20"
@@ -757,11 +750,56 @@ export default function ChatInterface({
                   >
                     <rect x="6" y="6" width="12" height="12" rx="2" />
                   </svg>
-                  Stop & Submit
-                </button>
-              </>
-            ) : isProcessingVoice ? (
-              <div className="flex items-center gap-2 text-[#4a7c59]">
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                )}
+              </button>
+              
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isProcessingVoice ? "Transcribing..." : isRecording ? "Recording..." : "Type your message..."}
+                disabled={isTyping || isLoadingOpening || isProcessingVoice}
+                className="
+                  flex-1 px-4 py-2 rounded-full
+                  bg-[#e8f5e9] border-2 border-transparent
+                  focus:border-[#4a7c59] focus:outline-none
+                  text-[#2d5a3d] placeholder-[#4a7c59]/50
+                  transition-colors duration-200
+                  disabled:opacity-50
+                "
+              />
+            </div>
+            
+            {/* Recording indicator */}
+            {isRecording && (
+              <div className="flex items-center justify-center gap-2 text-red-500 mt-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-sm font-medium">Recording...</span>
+              </div>
+            )}
+            
+            {/* Processing indicator */}
+            {isProcessingVoice && (
+              <div className="flex items-center justify-center gap-2 text-[#4a7c59] mt-2">
                 <span className="inline-flex gap-1">
                   <span
                     className="w-2 h-2 bg-[#4a7c59] rounded-full animate-bounce"
@@ -776,74 +814,27 @@ export default function ChatInterface({
                     style={{ animationDelay: "300ms" }}
                   />
                 </span>
-                <span className="text-sm font-medium">Processing...</span>
+                <span className="text-sm font-medium">Transcribing...</span>
               </div>
-            ) : (
+            )}
+            
+            {/* Submit button - centered below input */}
+            <div className="flex justify-center mt-3">
               <button
-                onClick={startRecording}
-                disabled={isTyping || isLoadingOpening}
+                onClick={() => handleSend()}
+                disabled={!inputValue.trim() || isTyping || isLoadingOpening || isRecording || isProcessingVoice}
                 className="
-                  px-8 py-3 rounded-full
+                  px-8 py-2 rounded-full
                   bg-[#4a7c59] text-white font-semibold
                   hover:bg-[#3d6b4a] active:scale-95
                   transition-all duration-200
                   disabled:opacity-50 disabled:cursor-not-allowed
-                  flex items-center gap-2
                 "
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-                Start Recording
+                Submit
               </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              disabled={isTyping || isLoadingOpening}
-              className="
-                flex-1 px-4 py-2 rounded-full
-                bg-[#e8f5e9] border-2 border-transparent
-                focus:border-[#4a7c59] focus:outline-none
-                text-[#2d5a3d] placeholder-[#4a7c59]/50
-                transition-colors duration-200
-                disabled:opacity-50
-              "
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={!inputValue.trim() || isTyping || isLoadingOpening}
-              className="
-                px-6 py-2 rounded-full
-                bg-[#4a7c59] text-white font-semibold
-                hover:bg-[#3d6b4a] active:scale-95
-                transition-all duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
-              "
-            >
-              Send
-            </button>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>

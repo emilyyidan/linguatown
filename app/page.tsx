@@ -153,10 +153,15 @@ function HomeContent() {
     <div className="py-6 sm:py-8 md:py-10 relative z-10">
       {/* Header with level indicator */}
       <div className="text-center mb-4 sm:mb-6 md:mb-8 relative z-20 px-4 py-4 sm:px-6 sm:py-6">
-        {/* Language picker in top right */}
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#2d5a3d] mb-4">
+          Lingua Town
+        </h1>
+
+        {/* Language and difficulty dropdowns aligned horizontally */}
         {isClient && (
-          <div className="absolute top-0 right-0" ref={languageDropdownRef}>
-            <div className="relative">
+          <div className="flex flex-row items-center justify-center gap-3 flex-wrap">
+            {/* Language picker */}
+            <div className="relative" ref={languageDropdownRef}>
               <button
                 onClick={() =>
                   setIsLanguageDropdownOpen(!isLanguageDropdownOpen)
@@ -191,7 +196,7 @@ function HomeContent() {
 
               {/* Language dropdown menu */}
               {isLanguageDropdownOpen && (
-                <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-lg overflow-hidden z-50 min-w-[160px]">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white rounded-xl shadow-lg overflow-hidden z-50 min-w-[160px]">
                   {getAvailableLearningLanguages().map((lang) => (
                     <button
                       key={lang}
@@ -231,16 +236,7 @@ function HomeContent() {
                 </div>
               )}
             </div>
-          </div>
-        )}
 
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#2d5a3d] mb-4">
-          Lingua Town
-        </h1>
-
-        {/* Difficulty badge and progress */}
-        {isClient && (
-          <div className="flex flex-col items-center gap-3">
             {/* Clickable difficulty selector */}
             <div className="relative" ref={dropdownRef}>
               <button
@@ -316,8 +312,12 @@ function HomeContent() {
                 </div>
               )}
             </div>
+          </div>
+        )}
 
-            {/* Progress bar */}
+        {/* Progress bar */}
+        {isClient && (
+          <div className="flex flex-col items-center gap-3 mt-3">
             <div className="w-full max-w-xs">
               <div className="flex justify-between text-sm text-[#4a7c59] mb-1">
                 <span>Progress</span>
@@ -381,7 +381,9 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<div className="py-6 sm:py-8 md:py-10">Loading...</div>}>
+    <Suspense
+      fallback={<div className="py-6 sm:py-8 md:py-10">Loading...</div>}
+    >
       <HomeContent />
     </Suspense>
   );

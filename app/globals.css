@@ -162,8 +162,8 @@ body {
 
 /* Responsive sizing using CSS custom properties from SIZE_CONFIG */
 .building-size-responsive {
-  width: var(--building-size-base, 200px);
-  height: var(--building-size-base, 200px);
+  width: var(--building-size-base, 170px);
+  height: var(--building-size-base, 170px);
 }
 
 @media (min-width: 640px) {
