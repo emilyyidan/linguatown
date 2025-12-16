@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import BuildingCard from "@/components/BuildingCard";
 import {
@@ -46,7 +46,7 @@ const difficultyHoverColors: Record<DifficultyLevel, string> = {
   advanced: "hover:bg-purple-600",
 };
 
-export default function Home() {
+function HomeContent() {
   const [stages, setStages] = useState<Record<string, number>>({});
   const [globalLevel, setGlobalLevelState] =
     useState<DifficultyLevel>("beginner");
@@ -376,5 +376,13 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="py-6 sm:py-8 md:py-10">Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }
