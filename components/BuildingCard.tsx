@@ -29,9 +29,9 @@ const SIZE_CONFIG = {
         md: 120, // Medium screens
       },
       cart: {
-        base: 90, // Mobile (default)
-        sm: 100, // Small screens
-        md: 150, // Medium screens
+        base: 100, // Mobile (default)
+        sm: 120, // Small screens
+        md: 160, // Medium screens
       },
     },
   },
@@ -65,7 +65,7 @@ const DECORATION_POSITIONS = {
       // - right: percentage from right (0 = right edge, 0.1 = 10% from right)
       // - rightOffset: ratio of building size
       // - rightPx: fixed pixel offset
-      right: "10%", // Percentage from right edge of building
+      right: "5%", // Percentage from right edge of building
       // rightOffset: 0.10, // Alternative: ratio of building size
       // rightPx: 0, // Fine-tuning pixel offset
 
@@ -73,7 +73,7 @@ const DECORATION_POSITIONS = {
       // - bottom: percentage from bottom (0 = bottom, 0.15 = 15% from bottom)
       // - bottomOffset: ratio of building size
       // - bottomPx: fixed pixel offset
-      bottom: "15%", // Percentage from bottom edge of building
+      bottom: "5%", // Percentage from bottom edge of building
       // bottomOffset: 0.15, // Alternative: ratio of building size
       // bottomPx: 0, // Fine-tuning pixel offset
     },
@@ -106,7 +106,11 @@ function calculateDecorationPosition(
       : `${config.topPx}px`;
   }
 
-  if ("bottom" in config && config.bottom && typeof config.bottom === "string") {
+  if (
+    "bottom" in config &&
+    config.bottom &&
+    typeof config.bottom === "string"
+  ) {
     style.bottom = config.bottom;
   } else if ("bottomOffset" in config && config.bottomOffset !== undefined) {
     style.bottom = `calc(var(--current-building-size) * ${config.bottomOffset})`;
@@ -121,7 +125,11 @@ function calculateDecorationPosition(
   if ("center" in config && config.center) {
     style.left = "50%";
     style.transform = "translateX(-50%)";
-  } else if ("left" in config && config.left && typeof config.left === "string") {
+  } else if (
+    "left" in config &&
+    config.left &&
+    typeof config.left === "string"
+  ) {
     style.left = config.left;
   } else if ("leftOffset" in config && config.leftOffset !== undefined) {
     style.left = `calc(var(--current-building-size) * ${config.leftOffset})`;
@@ -169,26 +177,40 @@ export default function BuildingCard({
   const prevShouldAnimateRef = useRef<boolean>(false);
   const prevStagesRef = useRef<number>(stages);
 
-  // Track which decorations should be visible
-  const showCroissant = isBakery && stages >= 1;
-  const showCart = isBakery && stages >= 2;
+  // Track which decorations should be visible (revealed stages, not actual stages)
+  const [revealedStages, setRevealedStages] = useState(stages);
+  const showCroissant = isBakery && revealedStages >= 1;
+  const showCart = isBakery && revealedStages >= 2;
   const [croissantJustAdded, setCroissantJustAdded] = useState(false);
   const [cartJustAdded, setCartJustAdded] = useState(false);
 
   // Track when decorations are newly added
   useEffect(() => {
-    if (isBakery) {
+    if (isBakery && stages > prevStagesRef.current) {
+      const animationDelay = 800; // Delay to allow scrolling into view
+      const animationDuration = 1200;
       const prevStages = prevStagesRef.current;
-      if (stages === 1 && prevStages === 0) {
-        setCroissantJustAdded(true);
-        setTimeout(() => setCroissantJustAdded(false), 800);
-      }
-      if (stages === 2 && prevStages === 1) {
-        setCartJustAdded(true);
-        setTimeout(() => setCartJustAdded(false), 800);
-      }
-      prevStagesRef.current = stages;
+
+      // Delay revealing new decorations, then animate
+      setTimeout(() => {
+        setRevealedStages(stages);
+
+        // Animate croissant if stages increased to 1+
+        if (stages >= 1 && prevStages < 1) {
+          setCroissantJustAdded(true);
+          setTimeout(() => setCroissantJustAdded(false), animationDuration);
+        }
+        // Animate cart if stages increased to 2+
+        if (stages >= 2 && prevStages < 2) {
+          setCartJustAdded(true);
+          setTimeout(() => setCartJustAdded(false), animationDuration);
+        }
+      }, animationDelay);
+    } else if (isBakery) {
+      // Stages decreased or stayed same - update immediately without animation
+      setRevealedStages(stages);
     }
+    prevStagesRef.current = stages;
   }, [stages, isBakery]);
 
   // Trigger level up animation sequence when shouldAnimate is true and level increased
@@ -354,7 +376,7 @@ export default function BuildingCard({
                     object-contain
                     ${
                       croissantJustAdded
-                        ? "animate-[decorationReveal_0.8s_ease-out]"
+                        ? "animate-[decorationReveal_1.2s_ease-out]"
                         : ""
                     }
                   `}
@@ -387,7 +409,7 @@ export default function BuildingCard({
                     object-contain
                     ${
                       cartJustAdded
-                        ? "animate-[decorationReveal_0.8s_ease-out]"
+                        ? "animate-[decorationReveal_1.2s_ease-out]"
                         : ""
                     }
                   `}

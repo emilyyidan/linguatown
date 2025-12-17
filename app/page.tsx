@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import BuildingCard from "@/components/BuildingCard";
+import DevTools from "@/components/DevTools";
 import {
   getAllLocationStages,
   getGlobalLevel,
@@ -375,6 +376,9 @@ function HomeContent() {
           </div>
         </div>
       </div>
+
+      {/* Dev tools - only visible in development */}
+      <DevTools onProgressChange={refreshProgress} />
     </div>
   );
 }

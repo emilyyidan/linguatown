@@ -40,8 +40,8 @@ export function getTurnLimits(difficulty: DifficultyLevel): { min: number; max: 
 const locationScenarios: Record<string, Record<DifficultyLevel, string>> = {
   "Restaurant": {
     beginner: `SCENARIO: Simple ordering
-- Help them order a meal (drink, main course, maybe dessert)
-- Ask simple questions: "What would you like?" "Anything to drink?"
+- Help them order from the menu.
+- Ask simple questions like "What would you like?" or"Anything to drink?", but only one at a atime
 - Keep it to basic menu items or simple choice questions`,
     intermediate: `SCENARIO: Special occasion dinner
 - They're planning a birthday dinner or anniversary meal
@@ -56,7 +56,7 @@ const locationScenarios: Record<string, Record<DifficultyLevel, string>> = {
   },
   "Bakery": {
     beginner: `SCENARIO: Simple purchase
-- Help them choose what to buy including how many of various items.
+- Help them choose what to buy.
 - Create realistic scenarios such as an item being out of stock or needing to wait for it to be done baking
 - Ask basic questions: "What can I get you?" "For here or to go?"
 - Suggest popular items, handle straightforward transactions`,
@@ -157,8 +157,8 @@ export function getDifficultyGuidelines(difficulty: DifficultyLevel): string {
       return `CONVERSATION STYLE:
 - Use simple, clear language
 - Offer variety between direct questions, and offering information and letting the user direct the conversation.
-- If asking a question, only ask one. Do not include multiple questions in one turn.
-- Keep your responses short (1 sentence)
+- Important: If asking a question, only ask one. Do not include multiple questions in one turn.
+- Keep your messages short (< 20 words)
 - Focus on the immediate task
 - Be patient and encouraging`;
     
@@ -340,7 +340,7 @@ ${characterMessage}
 
 ${contextSummary}
 
-Generate a helpful hint in ${nativeLanguageName} (the student's native language) about what the student could say in response. 
+Generate a helpful hint in ${nativeLanguageName} (the student's native language) about what the student could say in response. Consider the role of the character and what would be appropriate for the student to say. For example, if the AI character is a waiter, it would not be appropriate for the student to ask the waiter whether the student can bring them something.
 
 The hint should be:
 - Written entirely in ${nativeLanguageName}
