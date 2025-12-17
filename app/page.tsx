@@ -27,10 +27,10 @@ import {
 // These will scale proportionally with the container size
 const buildings = [
   { name: "Bank", slug: "bank", top: "15%", right: "14%" },
-  { name: "Restaurant", slug: "restaurant", top: "5%", left: "20%" },
-  { name: "Bakery", slug: "bakery", top: "72%", right: "20%" },
-  { name: "Grocery Store", slug: "grocery-store", top: "45%", right: "8%" },
-  { name: "Hotel", slug: "hotel", top: "55%", left: "20%" },
+  { name: "Restaurant", slug: "restaurant", top: "5%", left: "18%" },
+  { name: "Bakery", slug: "bakery", top: "72%", right: "18%" },
+  { name: "Grocery Store", slug: "grocery-store", top: "42%", right: "8%" },
+  { name: "Hotel", slug: "hotel", top: "55%", left: "16%" },
   { name: "School", slug: "school", top: "30%", right: "30%" },
 ];
 
