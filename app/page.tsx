@@ -26,11 +26,11 @@ import {
 // Building positions as percentages within the 9:16 aspect ratio container
 // These will scale proportionally with the container size
 const buildings = [
-  { name: "Bank", slug: "bank", top: "12%", right: "14%" },
-  { name: "Restaurant", slug: "restaurant", top: "6%", left: "20%" },
-  { name: "Bakery", slug: "bakery", top: "62%", right: "20%" },
+  { name: "Bank", slug: "bank", top: "15%", right: "14%" },
+  { name: "Restaurant", slug: "restaurant", top: "5%", left: "20%" },
+  { name: "Bakery", slug: "bakery", top: "72%", right: "20%" },
   { name: "Grocery Store", slug: "grocery-store", top: "45%", right: "8%" },
-  { name: "Hotel", slug: "hotel", top: "62%", left: "10%" },
+  { name: "Hotel", slug: "hotel", top: "55%", left: "20%" },
   { name: "School", slug: "school", top: "30%", right: "30%" },
 ];
 

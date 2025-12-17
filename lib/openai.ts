@@ -12,3 +12,4 @@ export function getOpenAIClient(): OpenAI {
   return new OpenAI({ apiKey });
 }
 
+
