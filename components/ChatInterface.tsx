@@ -483,7 +483,13 @@ export default function ChatInterface({
   };
 
   const processVoiceRecording = async () => {
+    const requestId = Math.random().toString(36).substring(7);
+    const startTime = Date.now();
+    
     try {
+      console.log(`[Voice Frontend ${requestId}] Starting voice processing at ${new Date().toISOString()}`);
+      console.log(`[Voice Frontend ${requestId}] Audio chunks count: ${audioChunksRef.current.length}`);
+      
       // Create a blob from audio chunks
       const blobType = audioChunksRef.current.length > 0 
         ? audioChunksRef.current[0].type 
@@ -491,51 +497,115 @@ export default function ChatInterface({
       const audioBlob = new Blob(audioChunksRef.current, {
         type: blobType,
       });
+      
+      console.log(`[Voice Frontend ${requestId}] Audio blob created:`, {
+        size: audioBlob.size,
+        sizeKB: Math.round(audioBlob.size / 1024),
+        type: blobType,
+      });
 
       // Convert blob to base64 for sending to API
       const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
+      
+      reader.onerror = (error) => {
+        console.error(`[Voice Frontend ${requestId}] FileReader error:`, error);
+        alert("Error reading audio file. Please try again.");
+        setIsProcessingVoice(false);
+      };
       
       reader.onloadend = async () => {
-        const base64Audio = reader.result as string;
-        const base64Data = base64Audio.split(",")[1]; // Remove data URL prefix
+        try {
+          const loadEndTime = Date.now();
+          console.log(`[Voice Frontend ${requestId}] FileReader completed in ${loadEndTime - startTime}ms`);
+          
+          const base64Audio = reader.result as string;
+          if (!base64Audio) {
+            throw new Error("FileReader returned no result");
+          }
+          
+          const base64Data = base64Audio.split(",")[1]; // Remove data URL prefix
+          console.log(`[Voice Frontend ${requestId}] Base64 data prepared:`, {
+            totalLength: base64Audio.length,
+            dataLength: base64Data.length,
+            dataLengthKB: Math.round(base64Data.length / 1024),
+          });
 
-        // Send to voice streaming API
-        const response = await fetch("/api/voice/stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            audio: base64Data,
-            learningLanguage,
-            nativeLanguage,
-            difficulty,
-            conversationContext: mapMessagesToConversationContext(messages, CONVERSATION_CONTEXT_SIZE),
-          }),
-        });
+          // Send to voice streaming API
+          const fetchStartTime = Date.now();
+          console.log(`[Voice Frontend ${requestId}] Sending request to /api/voice/stream`);
+          
+          const response = await fetch("/api/voice/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              audio: base64Data,
+              learningLanguage,
+              nativeLanguage,
+              difficulty,
+              conversationContext: mapMessagesToConversationContext(messages, CONVERSATION_CONTEXT_SIZE),
+            }),
+          });
 
-        if (!response.ok) {
-          throw new Error("Failed to transcribe audio");
+          const fetchDuration = Date.now() - fetchStartTime;
+          console.log(`[Voice Frontend ${requestId}] Fetch completed in ${fetchDuration}ms:`, {
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Voice Frontend ${requestId}] Response error:`, {
+              status: response.status,
+              statusText: response.statusText,
+              body: errorText,
+            });
+            throw new Error(`Failed to transcribe audio: ${response.status} ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          const transcribedText = data.transcription;
+          
+          const totalDuration = Date.now() - startTime;
+          console.log(`[Voice Frontend ${requestId}] Transcription received in ${totalDuration}ms:`, {
+            text: transcribedText,
+            textLength: transcribedText?.length || 0,
+          });
+
+          if (transcribedText && transcribedText.trim()) {
+            // Set the transcribed text in the input field instead of sending automatically
+            setInputValue(transcribedText.trim());
+            // Focus the input so user can review/edit before submitting
+            setTimeout(() => {
+              inputRef.current?.focus();
+            }, 100);
+            console.log(`[Voice Frontend ${requestId}] Transcription set in input field`);
+          } else {
+            console.error(`[Voice Frontend ${requestId}] Empty transcription received`);
+            alert("Could not transcribe audio. Please try again.");
+          }
+
+          setIsProcessingVoice(false);
+          audioChunksRef.current = [];
+        } catch (error) {
+          const totalDuration = Date.now() - startTime;
+          console.error(`[Voice Frontend ${requestId}] Error in onloadend after ${totalDuration}ms:`, {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+          alert("Error processing voice recording. Please try again.");
+          setIsProcessingVoice(false);
         }
-
-        const data = await response.json();
-        const transcribedText = data.transcription;
-
-        if (transcribedText && transcribedText.trim()) {
-          // Set the transcribed text in the input field instead of sending automatically
-          setInputValue(transcribedText.trim());
-          // Focus the input so user can review/edit before submitting
-          setTimeout(() => {
-            inputRef.current?.focus();
-          }, 100);
-        } else {
-          alert("Could not transcribe audio. Please try again.");
-        }
-
-        setIsProcessingVoice(false);
-        audioChunksRef.current = [];
       };
+      
+      reader.readAsDataURL(audioBlob);
+      console.log(`[Voice Frontend ${requestId}] FileReader.readAsDataURL() called`);
     } catch (error) {
-      console.error("Error processing voice recording:", error);
+      const totalDuration = Date.now() - startTime;
+      console.error(`[Voice Frontend ${requestId}] Error in processVoiceRecording after ${totalDuration}ms:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       alert("Error processing voice recording. Please try again.");
       setIsProcessingVoice(false);
     }
