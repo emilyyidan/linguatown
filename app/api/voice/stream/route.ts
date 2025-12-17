@@ -47,17 +47,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const openai = getOpenAIClient();
+    let openai;
+    try {
+      openai = getOpenAIClient();
+    } catch (clientError) {
+      const errorMsg = clientError instanceof Error ? clientError.message : String(clientError);
+      console.error(`[Voice API ${requestId}] Failed to get OpenAI client:`, errorMsg);
+      return NextResponse.json(
+        { error: "OpenAI client configuration error" },
+        { status: 500 }
+      );
+    }
 
     // Convert base64 audio to buffer
-    const audioBuffer = Buffer.from(audio, "base64");
-    console.log(`[Voice API ${requestId}] Audio buffer created: ${audioBuffer.length} bytes`);
+    let audioBuffer: Buffer;
+    try {
+      audioBuffer = Buffer.from(audio, "base64");
+      console.log(`[Voice API ${requestId}] Audio buffer created: ${audioBuffer.length} bytes`);
+    } catch (bufferError) {
+      const errorMsg = bufferError instanceof Error ? bufferError.message : String(bufferError);
+      console.error(`[Voice API ${requestId}] Failed to create audio buffer:`, errorMsg);
+      return NextResponse.json(
+        { error: "Invalid audio data format" },
+        { status: 400 }
+      );
+    }
 
     // Create a File object for OpenAI API
     // In Node.js 18+, File is available globally
-    const audioFile = new File([audioBuffer], "audio.webm", {
-      type: "audio/webm",
-    });
+    let audioFile: File;
+    try {
+      // Check if File is available
+      if (typeof File === "undefined") {
+        throw new Error("File API is not available in this environment");
+      }
+      // Convert Buffer to Uint8Array for File constructor compatibility
+      const audioArray = new Uint8Array(audioBuffer);
+      audioFile = new File([audioArray], "audio.webm", {
+        type: "audio/webm",
+      });
+      console.log(`[Voice API ${requestId}] Audio file created:`, {
+        name: audioFile.name,
+        size: audioFile.size,
+        type: audioFile.type,
+      });
+    } catch (fileError) {
+      const errorMsg = fileError instanceof Error ? fileError.message : String(fileError);
+      console.error(`[Voice API ${requestId}] Failed to create audio file:`, errorMsg);
+      return NextResponse.json(
+        { error: `Failed to process audio file: ${errorMsg}` },
+        { status: 500 }
+      );
+    }
 
     // Use Whisper API for transcription
     // Note: OpenAI Realtime API requires WebSocket, which is better suited for client-side connections
@@ -66,11 +107,48 @@ export async function POST(request: NextRequest) {
     console.log(`[Voice API ${requestId}] Calling OpenAI Whisper API with language: ${whisperLanguage || "auto"}`);
     const whisperStartTime = Date.now();
     
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "whisper-1",
-      language: whisperLanguage,
-    });
+    let transcription;
+    try {
+      transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: "whisper-1",
+        language: whisperLanguage,
+      });
+    } catch (openaiError: any) {
+      const errorMsg = openaiError instanceof Error ? openaiError.message : String(openaiError);
+      const errorStatus = openaiError?.status || openaiError?.response?.status;
+      const errorCode = openaiError?.code || openaiError?.response?.data?.error?.code;
+      
+      console.error(`[Voice API ${requestId}] OpenAI API error:`, {
+        error: errorMsg,
+        status: errorStatus,
+        code: errorCode,
+        type: openaiError?.type,
+      });
+      
+      // Return more specific error based on OpenAI error
+      if (errorStatus === 401 || errorCode === "invalid_api_key") {
+        return NextResponse.json(
+          { error: "OpenAI API authentication failed" },
+          { status: 500 }
+        );
+      } else if (errorStatus === 429 || errorCode === "rate_limit_exceeded") {
+        return NextResponse.json(
+          { error: "OpenAI API rate limit exceeded. Please try again later." },
+          { status: 429 }
+        );
+      } else if (errorStatus === 413 || errorMsg.includes("file size")) {
+        return NextResponse.json(
+          { error: "Audio file is too large" },
+          { status: 400 }
+        );
+      } else {
+        return NextResponse.json(
+          { error: `OpenAI transcription error: ${errorMsg}` },
+          { status: 500 }
+        );
+      }
+    }
 
     const whisperDuration = Date.now() - whisperStartTime;
     console.log(`[Voice API ${requestId}] OpenAI Whisper API completed in ${whisperDuration}ms`);
@@ -99,13 +177,29 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const totalDuration = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
     console.error(`[Voice API ${requestId}] Error after ${totalDuration}ms:`, {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined,
+      error: errorMessage,
+      name: errorName,
+      stack: errorStack,
     });
+    
+    // Return more detailed error information
+    // In production, we still want to log the full error but return a user-friendly message
+    const isDevelopment = process.env.NODE_ENV === "development";
+    
     return NextResponse.json(
-      { error: "Failed to process voice input" },
+      { 
+        error: "Failed to process voice input",
+        // Include more details in development or for certain error types
+        ...(isDevelopment && {
+          details: errorMessage,
+          errorName,
+        }),
+      },
       { status: 500 }
     );
   }

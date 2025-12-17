@@ -555,12 +555,22 @@ export default function ChatInterface({
 
           if (!response.ok) {
             const errorText = await response.text();
+            let errorMessage = `Server error (${response.status})`;
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.error || errorJson.details || errorMessage;
+              console.error(`[Voice Frontend ${requestId}] Parsed error:`, errorJson);
+            } catch {
+              if (errorText) {
+                errorMessage = errorText;
+              }
+            }
             console.error(`[Voice Frontend ${requestId}] Response error:`, {
               status: response.status,
               statusText: response.statusText,
               body: errorText,
             });
-            throw new Error(`Failed to transcribe audio: ${response.status} ${response.statusText}`);
+            throw new Error(errorMessage);
           }
 
           const data = await response.json();
@@ -593,7 +603,7 @@ export default function ChatInterface({
             error: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined,
           });
-          alert("Error processing voice recording. Please try again.");
+          const errorMsg = error instanceof Error ? error.message : String(error); alert(`Error: ${errorMsg}`);
           setIsProcessingVoice(false);
         }
       };
@@ -606,7 +616,7 @@ export default function ChatInterface({
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
-      alert("Error processing voice recording. Please try again.");
+      const errorMsg = error instanceof Error ? error.message : String(error); alert(`Error: ${errorMsg}`);
       setIsProcessingVoice(false);
     }
   };
